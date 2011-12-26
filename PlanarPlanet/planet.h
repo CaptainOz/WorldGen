@@ -13,7 +13,7 @@
  #define TRUE 1
  #define FALSE 0
 #endif
-#ifdef WIN32 || NEED_RAND48
+#if defined( WIN32 ) || defined( NEED_RAND48 )
  #define drand48() ((double)rand()/(double)RAND_MAX)
  #define srand48(i) srand(i)
 #endif

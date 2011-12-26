@@ -57,6 +57,14 @@ int main(int argc,char **argv)
          debug = TRUE;
       if (strstr(argv[i],"-D") != NULL)
          demomode = TRUE;
+      if (strstr(argv[i],"-S") != NULL)
+          sscanf( argv[++i], "%i", &seedvalue );
+      if (strstr(argv[i],"-F") != NULL)
+          sscanf( argv[++i], "%i", &spheredepth );
+      if (strstr(argv[i],"--origin") != NULL)
+          whichmethod = 1;
+      if (strstr(argv[i],"--notorigin") != NULL)
+          whichmethod = 2;
    }
 
    /* Set things up and go */
@@ -311,14 +319,15 @@ void MakeGeometry(void)
          }
       }
       niter = iterationdepth;
-      srand48(seedvalue);
+      srand(seedvalue);
    }
+   printf( "Generating -S %i -F %i %s\n", seedvalue, spheredepth, (whichmethod == 1 ? "--origin" : "--notorigin"));
 
    if (geometrydirty == REALDIRTY || geometrydirty == ADDONE) {
 
       /* Form the new surface */
       for (i=0;i<niter;i++) {
-      
+
          /* Choose a random normal */
          n.x = drand48() - 0.5;
          n.y = drand48() - 0.5;
@@ -805,12 +814,14 @@ void HandleReshape(int w,int h)
 */
 void GiveUsage(char *cmd)
 {
-   fprintf(stderr,"%s -h -f -s -d -D\n",cmd);
+   fprintf(stderr,"%s [-hfsdD] [-F <depth>] [-s <seed>]\n",cmd);
    fprintf(stderr,"   -h    this help message\n");
    fprintf(stderr,"   -f    full screen\n");
    fprintf(stderr,"   -s    stereo mode\n");
    fprintf(stderr,"   -d    debug mode\n");
    fprintf(stderr,"   -D    demo mode\n");
+   fprintf(stderr,"   -F    set the starting sphere depth\n");
+   fprintf(stderr,"   -S    set the starting random seed\n");
    exit(-1);
 }
 
@@ -1036,7 +1047,7 @@ int WindowDump(int width,int height,int stereo)
    unsigned char *image;
 
    /* Allocate our buffer for the image */
-   if ((image = malloc(3*width*height*sizeof(char))) == NULL) {
+   if ((image = (unsigned char*)malloc(3*width*height*sizeof(char))) == NULL) {
       fprintf(stderr,"WindowDump - Failed to allocate memory for image\n");
       return(FALSE);
    }
