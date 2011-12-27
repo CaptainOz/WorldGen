@@ -1,0 +1,5 @@
+convert ../*.jpg %04d.jpg
+
+ffmpeg -r 10 -qmax 8 -i %04d.jpg test.mp4
+
+ffmpeg -r 20 -qmax 8 -i Image0011_%04d.jpg Vid11.mp4
