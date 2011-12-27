@@ -50,10 +50,10 @@ public class LinkSystem {
       // Add new link
       tree.put(new Long(getHash(a,b)), nl);
     }
-		if (!pointLinks.containsKey(a)) pointLinks.put(a,new Vector());
-		if (!pointLinks.containsKey(b)) pointLinks.put(b,new Vector());
-	  Vector v1=getPointLinks(a);
-	  Vector v2=getPointLinks(b);
+		if (!pointLinks.containsKey(a)) pointLinks.put(a,new ArrayList());
+		if (!pointLinks.containsKey(b)) pointLinks.put(b,new ArrayList());
+	  ArrayList v1=getPointLinks(a);
+	  ArrayList v2=getPointLinks(b);
 		if (!v1.contains(b)) v1.add(b);
 		if (!v2.contains(a)) v2.add(a);
   }
@@ -69,11 +69,11 @@ public class LinkSystem {
       System.out.println("Can't remove that link - it isn't there!");
     }
 		if (pointLinks.containsKey(a)) {
-  	  Vector v1=getPointLinks(a);
+  	  ArrayList v1=getPointLinks(a);
 		  if (v1!=null) v1.remove(b);
 		}
 		if (pointLinks.containsKey(b)) {
-			Vector v2=getPointLinks(b);
+			ArrayList v2=getPointLinks(b);
 			if (v2!=null) v2.remove(a);
 		}
   }
@@ -102,28 +102,28 @@ public class LinkSystem {
   public void empty() {tree=new HashMap();pointLinks=new HashMap();}
 	public int getPointLinksSize(TecPoint p) {
 	  if (!pointLinks.containsKey(p)) return -1;
-		Vector v=(Vector)pointLinks.get(p);
+		ArrayList v=(ArrayList)pointLinks.get(p);
 		return v.size();
 	}
-	public Vector getPointLinks(TecPoint p) {
+	public ArrayList getPointLinks(TecPoint p) {
 	  if (!pointLinks.containsKey(p))
 			return null;
-		return (Vector)pointLinks.get(p);
+		return (ArrayList)pointLinks.get(p);
 	}
 	public void removePoint(TecPoint p) {
 		if (pointLinks.containsKey(p)) {
-			Vector linkedPoints=new Vector(getPointLinks(p));
+			ArrayList linkedPoints=new ArrayList(getPointLinks(p));
 			for (int i=0; i<linkedPoints.size(); i++)
 				removeLink(p,(TecPoint)linkedPoints.get(i));
 		}
-    Vector linkPairVec=new Vector(tree.values());
+    ArrayList linkPairVec=new ArrayList(tree.values());
 		for (int i=0; i<linkPairVec.size(); i++) {
 			LinkPair lp=(LinkPair)linkPairVec.get(i);
 			if (lp.getA()==p || lp.getB()==p) removeLink(lp.getA(),lp.getB());
 		}
 	}
-	public Vector getLinkedPoints(TecPoint p, Vector points) {
-	  Vector out=new Vector();
+	public ArrayList getLinkedPoints(TecPoint p, ArrayList points) {
+	  ArrayList out=new ArrayList();
 	  TecPoint tempPoint;
 	  for (int i=0; i<points.size(); i++) {
 		  tempPoint=(TecPoint)points.get(i);

@@ -1,30 +1,22 @@
 package TectonicPlanet;
 
 // Standard Java imports
-import java.io.*;
 import java.awt.*;
-import java.math.*;
-import java.awt.image.*;
-import java.awt.event.*;
-import java.awt.geom.*;
-import javax.swing.*;
-import javax.swing.event.*;
 import javax.vecmath.*;
-import javax.media.j3d.*;
 import java.util.*;
 
 
 
-class TecPlate {
+public class TecPlate {
   private Point3d pos=null;		// Notional plate centre
-  private Vector points=null;	// List of points of this plate
+  private ArrayList points=null;	// List of points of this plate
   //private Vector tets=null;	// List of tetrahedrons for this plate
   private Color col=null;
   private Vector3d force=null;
   private double rotation=0;
   public double densityTweak=0;
   public Vector3d splitVector=null;
-  public Vector edgeLinkPairs=null;
+  public ArrayList edgeLinkPairs=null;
   public Point3d meanPos1=null,meanPos2=null;
   public Vector3d meanVec1=null,meanVec2=null;
 	public boolean linkRemoved=false;
@@ -37,30 +29,30 @@ class TecPlate {
   }
   private void init() {
     pos=new Point3d();
-    points=new Vector();
+    points=new ArrayList();
     col=new Color((float)(Math.random()),(float)(Math.random()),(float)(Math.random()));
     force=new Vector3d();
     splitVector=new Vector3d();
-    edgeLinkPairs=new Vector();
+    edgeLinkPairs=new ArrayList();
 		resetForces();
   }
   public void addPoint(TecPoint p) {
     points.add(p);
   }
   public void removePoint(TecPoint p) {
-    points.removeElement(p);
+      points.remove( p );
   }
   public TecPoint getPoint(int i) {
     return (TecPoint)points.get(i);
   }
-  public Vector getPoints() {return points;}
+  public ArrayList getPoints() {return points;}
   public Point3d getPos() {return pos;}
   public Color getCol() {return col;}
   public void setCol(Color c) {col=c;}
-  //public Vector getTets() {return tets;}
+  //public ArrayList getTets() {return tets;}
 	
-	public Vector getLinks(LinkSystem linkSystem) {
-		Vector out=new Vector();
+	public ArrayList getLinks(LinkSystem linkSystem) {
+		ArrayList out=new ArrayList();
 		TecPoint p;
 		for (int i=0; i<points.size(); i++) {
 			p=getPoint(i);
@@ -214,7 +206,7 @@ class TecPlate {
       if (Double.isNaN(d)) throw(new Exception("double is NaN"));
       if (Double.isInfinite(d)) throw(new Exception("double is infinite"));
     } catch (Exception e) {
-      e.printStackTrace();
+      e.printStackTrace( System.out );
       System.exit(1);
     }
   }
@@ -227,7 +219,7 @@ class TecPlate {
       if (Double.isNaN(t.z)) throw(new Exception("t.z is NaN"));
       if (Double.isInfinite(t.z)) throw(new Exception("t.z is infinite"));
     } catch (Exception e) {
-      e.printStackTrace();
+      e.printStackTrace( System.out );
       System.exit(1);
     }
   }

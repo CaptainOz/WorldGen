@@ -59,9 +59,9 @@ public class PointViewer extends JPanel {
 	public void updateDetails() {
 	  double lat=point.getLat();
 	  double lon=point.getLon();
-	  String temp=new String("Latitude "+(float)Math.toDegrees(Math.abs(lat))+"°");
+	  String temp=new String("Latitude "+(float)Math.toDegrees(Math.abs(lat))+":");
 		if (lat<0) temp+="S"; else temp+="N";
-		temp+=", longitude "+(float)Math.toDegrees(Math.abs(lon))+"°";
+		temp+=", longitude "+(float)Math.toDegrees(Math.abs(lon))+":";
 		if (lon>0) temp+="E"; else temp+="W";
 	  latlon.setText(temp);
 		

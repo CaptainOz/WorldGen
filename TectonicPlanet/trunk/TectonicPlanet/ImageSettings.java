@@ -17,7 +17,7 @@ import java.util.*;
 
 
 // Deal with Colormaps
-class ImageSettings extends HandyPanel implements ActionListener{
+public class ImageSettings extends HandyPanel implements ActionListener{
   private GeneralFrame frame=null;
 	// Single Image settings
 	private int singleSize=1024;

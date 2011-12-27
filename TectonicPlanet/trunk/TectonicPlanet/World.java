@@ -1,16 +1,12 @@
 package TectonicPlanet;
 
 // Standard Java imports
-import java.awt.AlphaComposite;
 import java.awt.Color;
-import java.awt.Composite;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
-import java.awt.image.SampleModel;
 import java.awt.image.BandedSampleModel;
 import java.awt.image.DataBuffer;
 import java.io.DataInputStream;
@@ -22,9 +18,6 @@ import java.io.BufferedWriter;
 import java.io.PrintWriter;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.channels.FileChannel;
 import java.util.*;
 
 // Java3d imports
@@ -42,9 +35,9 @@ import javax.media.j3d.Transform3D;
  */
 public class World {
   // Physics bits
-    private Vector points = null;		// The points of the surface
-    private Vector plates = null;		// The plates of the surface
-    private Vector tets = null;		// The tetrahedrons of the surface
+    private ArrayList points = null;		// The points of the surface
+    private ArrayList plates = null;		// The plates of the surface
+    private ArrayList tets = null;		// The tetrahedrons of the surface
     private int epoch = 0;  // "Date". Basically, how many cycles have been run.
     private double planetRadius = 6400.0, planetSurfaceArea;
     private int km = 360; // The default distance between surface points
@@ -106,8 +99,8 @@ public class World {
   }
     
   private void initStorage() {
-  	points = new Vector();
-  	plates = new Vector();
+  	points = new ArrayList();
+  	plates = new ArrayList();
   	mStrength = new double[mantlePoints];
   	mPoint = new Point3d[mantlePoints];
   	linkSystem = new LinkSystem();
@@ -313,7 +306,7 @@ public class World {
    * loads a World from the given file
    * @param filename	the filename of the file to load the World from
    */
-  public void load(String filename) {
+  final public void load(String filename) {
     System.out.println("\n\nLoading file "+filename+"...");
     try {
 	    DataInputStream datainputstream	= new DataInputStream(new FileInputStream(filename));
@@ -322,21 +315,21 @@ public class World {
         epoch = datainputstream.readInt();
 	    } catch (Exception exception) {
         System.out.println("Error reading epoch - "+exception.toString());
-        exception.printStackTrace();
+        exception.printStackTrace( System.out );
 	    }
 			// Planet radius
 	    try {
         planetRadius = datainputstream.readDouble();
 	    } catch (Exception exception) {
         System.out.println("Error reading planetRadius - "+exception.toString());
-        exception.printStackTrace();
+        exception.printStackTrace( System.out );
 	    }
 			// Km
 	    try {
         km = datainputstream.readInt();
 	    } catch (Exception exception) {
         System.out.println("Error reading km - "+exception.toString());
-        exception.printStackTrace();
+        exception.printStackTrace( System.out );
 	    }
 			// Mantle points
 	    mantlePoints = datainputstream.readInt();
@@ -360,12 +353,12 @@ public class World {
 	    }
       initColors(); // Reset the colours to the built-in ones
 			// Number of plates
-	    plates = new Vector();
+	    plates = new ArrayList();
 	    int numPlates = datainputstream.readInt();
 	    for (int i_28_ = 0; i_28_ < numPlates; i_28_++)
         plates.add(new TecPlate(0.0, 0.0, 0.0));
 			// Number of points
-	    points = new Vector();
+	    points = new ArrayList();
 	    int numPoints = datainputstream.readInt();
 	    for (int i_30_ = 0; i_30_ < numPoints; i_30_++) {
     		TecPoint tecpoint = new TecPoint(this, datainputstream.readDouble(), datainputstream.readDouble(), datainputstream.readDouble(), datainputstream.readInt());
@@ -418,7 +411,7 @@ public class World {
         getPoint(i_39_).setColor(colorMap.map(getPoint(i_39_).getSurfaceHeight() - TecPoint.seaLevel));
       // store interpolated colours in the links
   	  Color c1,c2;
-      Vector tempVec=new Vector(getLinkSystem().getCollection());
+      ArrayList tempVec=new ArrayList(getLinkSystem().getCollection());
       for (int i=0; i<tempVec.size(); i++) {
         LinkPair lp=(LinkPair)tempVec.get(i);
         c1=lp.getA().getColor();
@@ -427,7 +420,7 @@ public class World {
       }
   	} catch (Exception exception) {
   	  System.out.println("Error while loading the world - "+exception);
-  	  exception.printStackTrace();
+  	  exception.printStackTrace( System.out );
   	}
   }
     
@@ -442,7 +435,7 @@ public class World {
 				saveFile=new File("TectonicPlanet/Worlds/World"+num+".world");
 	    } catch (Exception e ) {
 	      System.out.println("Error finding suitable file to save to - "+e);
-	      e.printStackTrace();
+	      e.printStackTrace( System.out );
 	    }
     }
 		
@@ -505,7 +498,7 @@ public class World {
 	    dataoutputstream.close();
     } catch (Exception exception) {
 	    System.out.println("Error while saving the world - "+exception.toString());
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
   	}
   	System.out.println("done!");
   }
@@ -530,8 +523,8 @@ public class World {
   public boolean altered() {	return altered;    }
   public void addPoint(TecPoint tecpoint) {points.add(tecpoint);    }
   public TecPoint getPoint(int i) {return (TecPoint) points.get(i);    }
-  public Vector getPoints() {	return points;    }
-  public Vector getTets() {	return tets;    }
+  public ArrayList getPoints() {	return points;    }
+  public ArrayList getTets() {	return tets;    }
   public int getNumPoints() {	return points.size();    }
   public double getPlanetRadius() {	return planetRadius;    }
   public TecPoint getCenterOfPlanet() {	return centerOfPlanet;    }
@@ -555,9 +548,9 @@ public class World {
   	if (centerOfPlanet == null)  centerOfPlanet = new TecPoint(0.0, 0.0, 0.0, epoch);
 		
     // If this isn't the first time we've delaunay'd the whole planet, find a suitable starting tet...
-    Vector activeTets = new Vector(2000,1000);
+    ArrayList activeTets = new ArrayList(2000);
     if (tets != null) {
-      activeTets = new Vector(tets.size());
+      activeTets = new ArrayList(tets.size());
 	    boolean goodTet;
 	    Tet startTet;
       // Make random tets, then check if they're ok
@@ -571,7 +564,7 @@ public class World {
     		}
 	    } while (!goodTet);
 			// Found a good tet, start a new list based on it
-	    tets = new Vector();
+	    tets = new ArrayList();
 	    linkSystem = new LinkSystem();
 	    tets.add(startTet);
 	    linkSystem.addLink(startTet.b, startTet.c);
@@ -581,7 +574,7 @@ public class World {
     } else {
 			// First time Delaunay
 			// Reset the list of tets
-	    tets = new Vector();
+	    tets = new ArrayList();
 	    linkSystem = new LinkSystem();
 		
 			// Try to make the first tet from the known pole points...
@@ -609,9 +602,9 @@ public class World {
     		Object object = null;
     		do {
   		    ok = true;
-  		    Vector nearby;
+  		    ArrayList nearby;
   		    do {
-            nearby = new Vector(pointsSurrounding(getPoint((int) (Math.random() * (double) (points.size() - 1))).getPos()));
+            nearby = new ArrayList(pointsSurrounding(getPoint((int) (Math.random() * (double) (points.size() - 1))).getPos()));
   		    } while (nearby == null || nearby.size() < 4);
           // OK, we've found some points, now pick 3 (plus centerOfPlanet) and make a tetrahedron from them
           int p1,p2,p3;
@@ -767,7 +760,7 @@ public class World {
       getPoint(i_39_).setColor(colorMap.map(getPoint(i_39_).getSurfaceHeight() - TecPoint.seaLevel));
     // store interpolated colours in the links
     Color c1,c2;
-    Vector tempVec=new Vector(getLinkSystem().getCollection());
+    ArrayList tempVec=new ArrayList(getLinkSystem().getCollection());
     for (int i=0; i<tempVec.size(); i++) {
       LinkPair lp=(LinkPair)tempVec.get(i);
       c1=lp.getA().getColor();
@@ -815,7 +808,7 @@ public class World {
   	if (cp == -1 || scp == -1) {
       System.out.println("Error in getMantleFlow: cp="+cp+", scp="+scp);
       System.out.println("Failed to find closest mantlePoints for point=("+x+", "+y+", "+z+")");
-	    new Exception().printStackTrace();
+	    new Exception().printStackTrace( System.out );
 	    System.exit(1);
   	}
   	double ratio = cd / (cd + scd);
@@ -857,7 +850,7 @@ public class World {
 	    gridBox[x][y][z].add(tecpoint);
     } catch (Exception e) {
 	    System.out.println("Problem adding to gridBox["+x+"]["+y+"]["+z+"] :"+e);
-	    e.printStackTrace();
+	    e.printStackTrace( System.out );
 	    System.exit(1);
     }
    }
@@ -983,7 +976,7 @@ public class World {
     // Check which way up all the triangles are
     // Note: I'm not sure this system gets used any more (17/2/2008)
   	System.out.println("Checking triangle way-upness...");
-  	Vector tris = new Vector();
+  	ArrayList tris = new ArrayList();
   	for (int i = 0; i < tets.size(); i++) {
 	    Triangle triangle = ((Tet) tets.get(i)).getTopTriangle();
 	    triangle.checkWayUp();
@@ -997,7 +990,7 @@ public class World {
   	System.out.println("Checking for null plates...");
   	for (int i = 0; i < plates.size(); i++) {
 	    TecPlate tecplate = (TecPlate) plates.get(i);
-	    if (tecplate.getPoints().size() == 0) {
+	    if (tecplate.getPoints().isEmpty()) {
     		plates.remove(i);
     		i--;
 	    }
@@ -1027,7 +1020,7 @@ public class World {
       tempPoints.remove(tecpoint);
       while(!addedPoints.isEmpty()) {
         tecpoint = (TecPoint)addedPoints.removeFirst();
-        Vector linkedPoints = (Vector)linkSystem.getPointLinks(tecpoint);
+        ArrayList linkedPoints = (ArrayList)linkSystem.getPointLinks(tecpoint);
         if (linkedPoints!=null)
           for(int j=0; j<linkedPoints.size(); j++) {
 		    TecPoint tp=(TecPoint)linkedPoints.get(j);
@@ -1132,14 +1125,14 @@ public class World {
     for (int i = 0; i < points.size(); i++)
 	    getPoint(i).lms = -1;
     
-    Vector landmassSections=new Vector();
+    ArrayList landmassSections=new ArrayList();
     TecPoint firstPoint,nextPoint, checkPoint;
     boolean added=false;
     for (int p=0; p<points.size(); p++) {
       firstPoint=getPoint(p);
 		  if (firstPoint.lms==-1 && firstPoint.isContinental()) {
 			  // The first unclaimed continental point we find will become the start of a new land mass section...
-        Vector lms=new Vector();
+        ArrayList lms=new ArrayList();
         landmassSections.add(lms);
         lms.add(firstPoint);
         firstPoint.lms=landmassSections.size()-1;
@@ -1166,7 +1159,7 @@ public class World {
     System.out.println("done! Counted "+landmassSections.size()+" landmass sections");
   	double[] lmsSize = new double[landmassSections.size()];
   	for (int i = 0; i < landmassSections.size(); i++) {
-	    Vector lms = (Vector) landmassSections.get(i);
+	    ArrayList lms = (ArrayList) landmassSections.get(i);
 	    for (int j = 0; j < lms.size(); j++) {
     		TecPoint tecpoint = (TecPoint) lms.get(j);
     		lmsSize[i] += tecpoint.getArea();//3.141592653589793 * Math.pow(tecpoint.getSize() / 2.0, 2.0); // Crappy old way of calculating area!!
@@ -1179,7 +1172,7 @@ public class World {
   	double collisionForce = 0.4;
   	double squash = 0.004;
   	double areaLimit = 1.0E7;		// How large an area is allowed to obduct
-  	Vector subductionLinks = new Vector();
+  	ArrayList subductionLinks = new ArrayList();
   	Iterator iterator_152_ = linkSystem.getIterator();
   	while (iterator_152_.hasNext()) {
 	    LinkPair linkpair = (LinkPair) iterator_152_.next();
@@ -1205,11 +1198,11 @@ public class World {
       			if (length < naturalLength * 0.8 && tecpoint.lms != -1  && tecpoint2.lms != -1) {	// If two continental bits are colliding LOTS!
               if (lmsSize[tecpoint.lms] < lmsSize[tecpoint2.lms]) {	// and tp1 is smaller
                 if (lmsSize[tecpoint.lms] <= areaLimit) {
-      				    obduct(((Vector)landmassSections.get(tecpoint.lms)),  ((Vector) landmassSections.get(tecpoint2.lms)));
+      				    obduct(((ArrayList)landmassSections.get(tecpoint.lms)),  ((ArrayList) landmassSections.get(tecpoint2.lms)));
       				    obducted = true;
                 }
               } else if (lmsSize[tecpoint2.lms] <= areaLimit) { // if tp2 is the smaller
-                obduct(((Vector)landmassSections.get(tecpoint2.lms)), (Vector) landmassSections.get(tecpoint.lms));
+                obduct(((ArrayList)landmassSections.get(tecpoint2.lms)), (ArrayList) landmassSections.get(tecpoint.lms));
                 obducted = true;
               }
       			}
@@ -1243,7 +1236,7 @@ public class World {
         				if (dist < squashSize) mPoints.add(tecpoint_162_);
               }
               // Make a list of all the tets which involve any of the points we are about to move
-              Vector squishTets=new Vector();
+              ArrayList squishTets=new ArrayList();
     			    for (int i = 0; i < tets.size(); i++) {
                 Tet tet=(Tet)tets.get(i);
                 if (tet.getPlate()==tecplate || tet.getPlate()==tecplate2)
@@ -1337,7 +1330,7 @@ public class World {
 	    TecPlate tecplate2 = cp.getPlate(); // Continental plate   (not necessarily true, but reflects which one gets subducted and which one overrides)
       // Before we kill the point (removing all its linking info, etc), we need to find out which direction it subducted in!
       Vector3d subDir=new Vector3d();
-      Vector linkPoints=linkSystem.getPointLinks(op);
+      ArrayList linkPoints=linkSystem.getPointLinks(op);
       // Add the vector of the link from each point (on the same plate) to the subducting point. This will give the vague direction of subduction (away from the edge of the plate)
       for (int j=0; j<linkPoints.size(); j++) {
         TecPoint tp=(TecPoint)linkPoints.get(j);
@@ -1437,7 +1430,7 @@ public class World {
     System.out.print("Doing FEA...");
     double breakForce=0.04;//40000.0/100.0;  // Tensile strength of links (*320 to compensate for link length)
     // Clear the old FEA data
-    Vector links=new Vector(linkSystem.getCollection());
+    ArrayList links=new ArrayList(linkSystem.getCollection());
 		for (int i=0; i<links.size(); i++) {
       LinkPair link=(LinkPair)links.get(i);
 		  link.pushForce=0;
@@ -1454,9 +1447,9 @@ public class World {
     }
     
     // Make a vector of the links inside each plate
-    Vector[] plVecs=new Vector[plates.size()];
+    ArrayList[] plVecs=new ArrayList[plates.size()];
     for (int j=0; j<plates.size(); j++)
-      plVecs[j]=new Vector(links.size());
+      plVecs[j]=new ArrayList(links.size());
     LinkPair lp;
     for (int j=0; j<links.size(); j++) {
       lp=(LinkPair)links.get(j);
@@ -1467,7 +1460,7 @@ public class World {
     }
     
     // FEA one plate at a time
-    Vector newPlates=new Vector();
+    ArrayList newPlates=new ArrayList();
     for (int i=0; i<plates.size(); i++) {
       if (Math.random()<1.2) {
         TecPlate plate=getPlate(i);
@@ -1475,7 +1468,7 @@ public class World {
         double plateExp=(0.1+0.9*Math.exp(-Math.pow(Math.min(0,plateArea-5000000)/35000000,2)));
         //System.out.println("Plate size exponent="+plateExp);
         // Collect the links of this plate
-        Vector plateLinks=plVecs[i];
+        ArrayList plateLinks=plVecs[i];
         /*LinkPair lp;
         for (int j=0; j<links.size(); j++) {
           lp=(LinkPair)links.get(j);
@@ -1519,25 +1512,25 @@ public class World {
             for (int l=0; l<plateLinks.size(); l++) {
               lp=(LinkPair)plateLinks.get(l);
               if (lp.broken) {
-                Vector linksFromA=linkSystem.getPointLinks(lp.getA());
+                ArrayList linksFromA=linkSystem.getPointLinks(lp.getA());
                 for (int r=0; r<linksFromA.size(); r++) 
                   ((TecPoint)linksFromA.get(r)).broken=true;
-                Vector linksFromB=linkSystem.getPointLinks(lp.getB());
+                ArrayList linksFromB=linkSystem.getPointLinks(lp.getB());
                 for (int r=0; r<linksFromB.size(); r++) 
                   ((TecPoint)linksFromB.get(r)).broken=true;
               }
             }
             // Find an unbroken TecPoint to start from...
-            Vector platePoints=plate.getPoints();
+            ArrayList platePoints=plate.getPoints();
             TecPoint start=null;
             for (int r=0; r<platePoints.size() && start==null; r++) {
               if (!plate.getPoint(r).broken) start=plate.getPoint(r);
             }
             if (start!=null) {
               // OK, we're got a start point. Set up to spread out from this point
-              Vector movedPoints=new Vector();
-              Vector unmovedPoints=new Vector(platePoints);
-              Vector brokenPoints=new Vector();
+              ArrayList movedPoints=new ArrayList();
+              ArrayList unmovedPoints=new ArrayList(platePoints);
+              ArrayList brokenPoints=new ArrayList();
               // Move the start point
               movedPoints.add(start);
               unmovedPoints.remove(start);
@@ -1552,7 +1545,7 @@ public class World {
               // Loop around, moving connected unbroken points to the "moved" pile
               for (int r=0; r<movedPoints.size() && unmovedPoints.size()>0; r++) {
                 TecPoint p1=(TecPoint)movedPoints.get(r);
-                Vector linkedPoints=linkSystem.getPointLinks(p1);
+                ArrayList linkedPoints=linkSystem.getPointLinks(p1);
                 for (int p=0; p<linkedPoints.size(); p++) {
                   TecPoint linkedPoint=(TecPoint)linkedPoints.get(p);
                   if (linkedPoint!=p1 && !linkedPoint.broken && unmovedPoints.contains(linkedPoint)) {
@@ -1585,7 +1578,7 @@ public class World {
                     // Get the linkedPoints for each brokenPoint, and count how many are in movedPoints and how many are in unmovedPoints
                     while (brokenPoints.size()>0) {
                       TecPoint bp=(TecPoint)brokenPoints.get(0);
-                      Vector linkedPoints=linkSystem.getPointLinks(bp);
+                      ArrayList linkedPoints=linkSystem.getPointLinks(bp);
                       int countMoved=0, countUnmoved=0;
                       for (int k=0; k<linkedPoints.size(); k++) {
                         if (movedPoints.contains(linkedPoints.get(k))) countMoved++;
@@ -1609,7 +1602,7 @@ public class World {
                   }
                   oldBrokenPointsSize=brokenPoints.size();
                   // Find broken points which are _directly_ linked to the new plate, and remember them
-                  Vector remember=new Vector();
+                  ArrayList remember=new ArrayList();
                   for (int j=0; j<plateLinks.size(); j++) {
                     lp=(LinkPair)plateLinks.get(j);
                     if (lp.getA().broken && !lp.getB().broken && lp.getB().getPlate()==newPlate && !remember.contains(lp.getA())) remember.add(lp.getA());
@@ -1728,7 +1721,7 @@ public class World {
         while (innerPlate.getPoints().size()>0 && outerPlate!=null) {
           TecPoint tecPoint=innerPlate.getPoint(0);
           tecPoint.setPlate(outerPlate);
-          Vector linkedPoints=linkSystem.getPointLinks(tecPoint);
+          ArrayList linkedPoints=linkSystem.getPointLinks(tecPoint);
           for (int j=0; j<linkedPoints.size(); j++) {
             linkSystem.getLinkPair(tecPoint,(TecPoint)linkedPoints.get(j)).plateCrosser=false;
           }
@@ -1740,7 +1733,7 @@ public class World {
     // Accrete small plates onto their most highly-linked neighbour
     System.out.println("Checking for tiny plates...");
     double plateSizeLimit=100000;  // Anything less than 100,000 km ^2 is tiny :)
-    Vector accPlates=new Vector();
+    ArrayList accPlates=new ArrayList();
     for (int i=0; i<plates.size(); i++) {
       //System.out.println("Plate size="+getPlate(i).getArea());
       if (getPlate(i).getArea()<plateSizeLimit || getPlate(i).getPoints().size()<3) accPlates.add(getPlate(i));
@@ -1803,7 +1796,7 @@ public class World {
         plane.cross(middle, getRandomVector());
         // OK, got the plane.
         // Now move all the points on one side of it into a new plate
-        Vector newPlatePoints=new Vector();
+        ArrayList newPlatePoints=new ArrayList();
         for (int j=0; j<getPlate(i).getPoints().size(); j++)
           if (plane.dot(new Vector3d(getPlate(i).getPoint(j).getPos()))>0) newPlatePoints.add(getPlate(i).getPoint(j));
         if (newPlatePoints.size()>5 && getPlate(i).getPoints().size()-newPlatePoints.size()>5) {  // Check there are points on both sides!
@@ -1878,7 +1871,7 @@ public class World {
         p.remove(liftedVol/p.getArea());  // Remove by height, not volume
         // Redo the volCap of this point, and all the points linked from it
         calcVolCap(p, gradientLimitOnLand,gradientLimitInSea);
-        Vector linkedPoints=linkSystem.getPointLinks(p);
+        ArrayList linkedPoints=linkSystem.getPointLinks(p);
         for (int j=0; j<linkedPoints.size(); j++) {calcVolCap((TecPoint)linkedPoints.get(j), gradientLimitOnLand,gradientLimitInSea);}
         // Find where to dump the rock
         int count=0;
@@ -1910,7 +1903,7 @@ public class World {
             liftedVol-=moveVol;
             // Redo the volCap of the lowest point, and all the points linked from it
             calcVolCap(lowest, gradientLimitOnLand,gradientLimitInSea);
-            Vector linkedPoints2=linkSystem.getPointLinks(lowest);
+            ArrayList linkedPoints2=linkSystem.getPointLinks(lowest);
             for (int k=0; k<linkedPoints2.size(); k++) {
               calcVolCap((TecPoint)linkedPoints2.get(k), gradientLimitOnLand,gradientLimitInSea);
             }
@@ -1922,7 +1915,7 @@ public class World {
             liftedVol-=moveVol;
             // Redo the volCap of the lowest point, and all the points linked from it
             calcVolCap(lowest, gradientLimitOnLand,gradientLimitInSea);
-            Vector linkedPoints2=linkSystem.getPointLinks(lowest);
+            ArrayList linkedPoints2=linkSystem.getPointLinks(lowest);
             for (int k=0; k<linkedPoints2.size(); k++) {
               calcVolCap((TecPoint)linkedPoints2.get(k), gradientLimitOnLand,gradientLimitInSea);
             }
@@ -2009,7 +2002,7 @@ public class World {
   	} while (smoothed>linkSystem.size()*0.6*0.0001);*/
     
     // Maybe do coral reef growth?
-    // Bring anything within 30° of the equator and 50m of the ocean surface to the surface.
+    // Bring anything within 30d of the equator and 50m of the ocean surface to the surface.
   	/*System.out.print("Growing coral reefs...");
     for (int i=0; i<points.size(); i++) {
       TecPoint p=getPoint(i);
@@ -2094,7 +2087,7 @@ public class World {
       getPoint(i_39_).setColor(colorMap.map(getPoint(i_39_).getSurfaceHeight() - TecPoint.seaLevel));
     // store interpolated colours in the links
 	  Color c1,c2;
-    Vector tempVec=new Vector(getLinkSystem().getCollection());
+    ArrayList tempVec=new ArrayList(getLinkSystem().getCollection());
     for (int i=0; i<tempVec.size(); i++) {
       lp=(LinkPair)tempVec.get(i);
       c1=lp.getA().getColor();
@@ -2107,7 +2100,7 @@ public class World {
   public void calcVolCap(TecPoint p, double gradientLimitOnLand, double gradientLimitInSea) {
     p.volCap=10e10;
     p.volCap2=10e10;
-    Vector linkedPoints=linkSystem.getPointLinks(p);
+    ArrayList linkedPoints=linkSystem.getPointLinks(p);
     for (int i=0; i<linkedPoints.size(); i++) {
       TecPoint p2=(TecPoint)linkedPoints.get(i);
       TecPoint tecpoint;
@@ -2161,7 +2154,7 @@ public class World {
 			
     // Expand the zone of invalidation
   	System.out.println("Expanding zone of invalidation...");
-  	Vector invalidTets = new Vector(tets.size());
+  	ArrayList invalidTets = new ArrayList(tets.size());
   	/*for (int i = 0; i <= 1; i++) {
 	    for (int i_198_ = 0; i_198_ < tets.size(); i_198_++) {
   			Tet tet = (Tet) tets.get(i_198_);
@@ -2224,7 +2217,7 @@ public class World {
     }
 
     // Build list of active tets
-  	Vector activeTets = new Vector(tets.size());
+  	ArrayList activeTets = new ArrayList(tets.size());
   	for (int i = 0; i < tets.size(); i++) {
   	  Tet tet = (Tet) tets.get(i);
   	  if (linkSystem.getCount(tet.b, tet.c) < 2
@@ -2243,7 +2236,7 @@ public class World {
     }
 
     // Build list of active tets
-  	activeTets = new Vector(tets.size());
+  	activeTets = new ArrayList(tets.size());
   	for (int i = 0; i < tets.size(); i++) {
 	    Tet tet = (Tet) tets.get(i);
 	    if (linkSystem.getCount(tet.b, tet.c) < 2
@@ -2609,7 +2602,7 @@ public class World {
 		// Pour water onto points, calc ocean depths
   	double waterVolume = 1.36E9;	// Total water on planet, in km^3
   	double addedVolume = 0.0;	// The volume already poured onto the planet
-  	Vector coveredPoints = new Vector();
+  	ArrayList coveredPoints = new ArrayList();
   	PointsByHeight pointsbyheight = new PointsByHeight();
   	for (int i_182_ = 0; i_182_ < points.size(); i_182_++)
 	    pointsbyheight.add(getPoint(i_182_));
@@ -2621,7 +2614,7 @@ public class World {
   	double currentHeight = baseHeight;
   	boolean done = false;
 		// Add first points
-  	Vector nextPoints = pointsbyheight.first();
+  	ArrayList nextPoints = pointsbyheight.first();
   	double nextHeight = ((TecPoint) nextPoints.get(0)).getSurfaceHeight();
   	for (int i_189_ = 0; i_189_ < nextPoints.size(); i_189_++) {
 	    coveredPoints.add(nextPoints.get(i_189_));
@@ -2677,7 +2670,7 @@ public class World {
       writer.write(null, new IIOImage(image, null, null), iwp);
     } catch (Exception exception) {
       System.out.println("Error saving JPG file - "+exception);
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
     }
   }
   public void saveJPG() {
@@ -2702,7 +2695,7 @@ public class World {
       saveJPG(image, file, 1);
     } catch (Exception exception) {
       System.out.println("Exception! - "+exception);
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
     }
     System.out.println("Images saved in "+(System.currentTimeMillis()-time)/60000.0f+" minutes! ("+(System.currentTimeMillis()-time)/1000.0f+" seconds)");
   }
@@ -2734,7 +2727,7 @@ public class World {
       saveJPG(image, file, 1);
     } catch (Exception exception) {
       System.out.println("Exception! - "+exception);
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
     }
     System.out.println("Images saved in "+(System.currentTimeMillis()-time)/60000.0f+" minutes! ("+(System.currentTimeMillis()-time)/1000.0f+" seconds)");
   }
@@ -2897,7 +2890,7 @@ public class World {
     Point3d pos=new Point3d();
     double lon,lat,dist1,dist2,dist3,temp,a,b,c,area1,area2,area3;
     TecPoint closest1=null,closest2=null,closest3=null;
-    HashSet gridBox;
+    HashSet gridBoxSet;
     for (int y1=0; y1<height; y1++) {
       int y=(int)((Math.asin(1-2*(double)y1/(height-1))+Math.PI/2)/Math.PI*height);
       lat=-Math.PI/2+(double)y/(height-1)*Math.PI;
@@ -2912,9 +2905,9 @@ public class World {
         dist2=planetRadius*planetRadius;
         dist3=planetRadius*planetRadius;
         closest1=closest2=null;
-        gridBox=pointsSurrounding(getGridBoxX(pos.x),getGridBoxY(pos.y),getGridBoxZ(pos.z));
-        if (gridBox!=null) {
-          Iterator iter=gridBox.iterator();
+        gridBoxSet=pointsSurrounding(getGridBoxX(pos.x),getGridBoxY(pos.y),getGridBoxZ(pos.z));
+        if (gridBoxSet!=null) {
+          Iterator iter=gridBoxSet.iterator();
           while(iter.hasNext()) {
             TecPoint tp=(TecPoint)iter.next();
             temp=tp.getPos().distanceSquared(pos);
@@ -2975,7 +2968,7 @@ public class World {
       if (!new File("TectonicPlanet/SatelliteData").exists()) new File("TectonicPlanet/SatelliteData").mkdir(); // Make sure the parent directory exists
     } catch (Exception exception) {
       System.out.println("Exception while making sure the SatelliteData directory exists - "+exception);
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
     }
     
     System.out.println("Saving .tfw...");
@@ -2999,7 +2992,7 @@ public class World {
       out.close();
     } catch (Exception exception) {
       System.out.println("Exception while saving .tfw - "+exception);
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
     }
     
     System.out.println("Calculating heightmap...");
@@ -3016,7 +3009,7 @@ public class World {
     double[][] heightmap=new double[res][res];
     Tet tet;
     double minHeight=100, maxHeight=-100;
-    Vector previousTets=new Vector();
+    ArrayList previousTets=new ArrayList();
     for (int i=0; i<res; i++)
       for (int j=0; j<res; j++) {
         pos2.set(pos);
@@ -3069,7 +3062,7 @@ public class World {
       ImageIO.write(img, "png", file);
     } catch (Exception exception) {
       System.out.println("Exception while saving .png - "+exception);
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
     }
     System.out.println("done!");
   }
@@ -3124,7 +3117,7 @@ public class World {
       ImageIO.write(img, "jpg", file);
     } catch (Exception exception) {
       System.out.println("Exception while saving elevation histogram jpg - "+exception);
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
     }
     System.out.println("done!");
   }
@@ -3152,7 +3145,7 @@ public class World {
 	    for (int row = 0;((double) row < (double) num * Math.pow(2.0, (double) lev) / 2.0); row++) {
         for (int col = 0;((double) col < (double) num * Math.pow(2.0, (double) lev)); col++) {
   		    System.out.println("Generating tile("+row+","+col+") of level "+lev);
-  		    Vector vector = new Vector();
+  		    ArrayList vector = new ArrayList();
           for (int x = 0; x < size; x++) {
       			double lon  = (6.283185307179586 * ((double) col + (double) x / (double) size) / ((double) num * Math.pow(2.0, (double) lev)));
       			lon = (lon + 3.141592653589793) % 6.283185307179586;
@@ -3209,7 +3202,7 @@ public class World {
   			}*/
   		    } catch (IOException ioexception) {
             System.out.println("I/O exception! - "+ioexception.toString());
-            ioexception.printStackTrace();
+            ioexception.printStackTrace( System.out );
   		    }
         }
       }
@@ -3801,7 +3794,7 @@ public class World {
         tile[lev][row][col] = ImageIO.read(new File(filename+lev+"/"+numberCode(row)+"/"+numberCode(row)+"_"+numberCode(col)+".jpg"));
       } catch (IOException e) {
   	    System.out.println("Error loading image:");
-        e.printStackTrace();
+        e.printStackTrace( System.out );
       }
     } else {
       System.out.println("Doing tile("+row+","+col+") of level "+lev);
@@ -3827,7 +3820,7 @@ public class World {
         ImageIO.write(tile[lev][row][col], "jpg", file);
       } catch (IOException e) {
   	    System.out.println("Error saving image:");
-        e.printStackTrace();
+        e.printStackTrace( System.out );
       }
     }
   }
@@ -3855,7 +3848,7 @@ public class World {
 						  imageSettings);
   	} catch (Exception exception) {
   	    System.out.println(exception);
-  	    exception.printStackTrace();
+  	    exception.printStackTrace( System.out );
   	}
   }
   
@@ -3900,9 +3893,9 @@ public class World {
   	double n2 = 0.0;
   	Vector3d vector3d = new Vector3d(0.0, 0.0, 0.0);
   	Vector3d total2 = new Vector3d(0.0, 0.0, 0.0);
-  	Vector vector = tecplate.getPoints();
-  	Vector points1 = new Vector(vector.size());
-  	Vector points2 = new Vector(vector.size());
+  	ArrayList vector = tecplate.getPoints();
+  	ArrayList points1 = new ArrayList(vector.size());
+  	ArrayList points2 = new ArrayList(vector.size());
   	for (int i = 0; i < vector.size(); i++) {
 	    TecPoint tecpoint = (TecPoint) vector.get(i);
 	    if (tecplate.splitVector.dot(new Vector3d(tecpoint.getPos()))	> 0.0) {
@@ -3926,7 +3919,7 @@ public class World {
     }
     // Somehow check the pointyness of the new (smaller) plate.
     // If it's too pointy, reduce its score
-  	Vector checkPoints;
+  	ArrayList checkPoints;
   	if (points1.size() < points2.size()) checkPoints = points1;
     else checkPoints = points2;
   	Point3d point3d = new Point3d();
@@ -3954,7 +3947,7 @@ public class World {
   	double d = 0.0;
     
     // Find the edges
-  	Vector vector = new Vector();
+  	ArrayList vector = new ArrayList();
   	for (int i = 0; i < tecplate.edgeLinkPairs.size(); i++) {
 	    LinkPair linkpair = (LinkPair) tecplate.edgeLinkPairs.get(i);
 	    if (linkpair.getA().getPlate() == tecplate && linkpair.getB().getPlate() == tecplate
@@ -3962,7 +3955,7 @@ public class World {
         vector.add(linkpair);
     }
     
-    if (vector.size() == 0) return 0.0;
+    if (vector.isEmpty()) return 0.0;
     
     Vector3d vector3d = new Vector3d(tecplate.splitVector.x, tecplate.splitVector.z, -tecplate.splitVector.y);
     Vector3d vector3d_448_ = new Vector3d(tecplate.splitVector.z, tecplate.splitVector.y, -tecplate.splitVector.x);
@@ -3993,7 +3986,7 @@ public class World {
     
   public void splitPlate(TecPlate tecplate) {
   	double d = plateLinkCrossers(tecplate);
-  	Vector vector = new Vector();
+  	ArrayList vector = new ArrayList();
   	for (int i = 0; i < tecplate.getPoints().size(); i++) {
 	    TecPoint tecpoint = tecplate.getPoint(i);
 	    if (tecplate.splitVector.dot(new Vector3d(tecpoint.getPos())) > 0.0)      vector.add(tecpoint);
@@ -4049,7 +4042,7 @@ public class World {
 
     // First clear the existing lists
     for (int i = 0; i < plates.size(); i++)
-	    ((TecPlate) plates.get(i)).edgeLinkPairs.removeAllElements();
+	    ((TecPlate) plates.get(i)).edgeLinkPairs.clear();
     for (int i = 0; i < tets.size(); i++) {
 	    Tet tet = (Tet) tets.get(i);
 	    Triangle triangle = tet.getTopTriangle();
@@ -4104,7 +4097,7 @@ public class World {
     }
   }
     
-  public void obduct(Vector p1, Vector p2) {
+  public void obduct(ArrayList p1, ArrayList p2) {
   	System.out.println("\t\t************");
   	System.out.println("\t\tOBDUCTION!!!");
   	System.out.println("\t\t************");
@@ -4122,7 +4115,7 @@ public class World {
       Double var_double_469_ = new Double(p.z);
       if (var_double.isNaN() || var_double_468_.isNaN() || var_double_469_.isNaN() || var_double.isInfinite() || var_double_468_.isInfinite() || var_double_469_.isInfinite()) {
 			  System.out.println("Point has bad position ("+p.x+","+p.y+","+p.z+")");
-    		new Exception().printStackTrace();
+    		new Exception().printStackTrace( System.out );
     		System.exit(1);
   	  }
   	}
@@ -4153,7 +4146,7 @@ public class World {
   	points.remove(tecpoint);
   	if (tecpoint.getPlate() != null) {
   	  tecpoint.getPlate().removePoint(tecpoint);
-  	  if (tecpoint.getPlate().getPoints().size() == 0)
+  	  if (tecpoint.getPlate().getPoints().isEmpty())
         plates.remove(tecpoint.getPlate());
   	}
   	for (int i = 0; i < tets.size(); i++) {
@@ -4197,7 +4190,7 @@ public class World {
 	  return null;
   }
     
-  public Tet getTet(Point3d point3d, Vector vector) {
+  public Tet getTet(Point3d point3d, ArrayList vector) {
 	  if (vector != null) {
 	    for (int i = 0; i < vector.size(); i++) {
 		    if (((Tet) vector.get(i)).strictlyContains(point3d))
@@ -4260,7 +4253,7 @@ public class World {
 	    System.out.println("Problem adding to tetGridBox["+i+"]["+i_550_+"]["+i_551_+"] :"+exception);
 	    System.out.println("Point was "+tet.b.getPos().x+","+tet.b.getPos().y+","+tet.b.getPos().z);
 	    System.out.println("PlanetRadius="+planetRadius+", tetGridSize="+tetGridSize);
-	    exception.printStackTrace();
+	    exception.printStackTrace( System.out );
 	    System.exit(1);
     }
   }

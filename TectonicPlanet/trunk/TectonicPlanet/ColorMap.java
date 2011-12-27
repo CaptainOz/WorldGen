@@ -1,23 +1,10 @@
 package TectonicPlanet;
 
 // Standard Java imports
-import java.io.*;
 import java.awt.*;
-import java.math.*;
-import java.awt.image.*;
-import java.awt.event.*;
-import java.awt.geom.*;
-import javax.swing.*;
-import javax.swing.event.*;
-import javax.vecmath.*;
-import javax.media.j3d.*;
-import java.util.*;
-
-
-
 
 // Deal with Colormaps
-class ColorMap {
+public class ColorMap {
   private Color[] color;
   private double[] value;
   private boolean changed=false;

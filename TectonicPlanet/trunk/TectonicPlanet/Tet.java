@@ -17,7 +17,7 @@ import java.util.*;
 
 
 
-class Tet {
+public class Tet {
   public TecPoint a,b,c,d;
   public Point3d center=null;
   public double radiussq, da, innersq, outersq,v1,v2,v3,area,oldArea;

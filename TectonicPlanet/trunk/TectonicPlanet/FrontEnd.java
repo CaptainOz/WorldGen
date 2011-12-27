@@ -3,17 +3,12 @@ package TectonicPlanet;
 // Standard Java imports
 import java.io.*;
 import java.awt.*;
-import java.math.*;
-import java.awt.image.*;
 import java.awt.event.*;
-import java.awt.geom.*;
 import javax.swing.*;
 import javax.swing.event.*;
 import javax.vecmath.*;
 import javax.media.j3d.*;
 import java.util.*;
-import javax.imageio.*;
-import com.sun.image.codec.jpeg.*;
 
 
 
@@ -60,10 +55,11 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
       FrontEnd fe=new FrontEnd();
 		  fe.initGUI();
     } catch(Exception e) {
-      e.printStackTrace();
+      e.printStackTrace( System.out );
     }
   }
   
+    @Override
   public void run() {
     running=true;
     runButton.setEnabled(false);
@@ -77,7 +73,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
     long time=System.currentTimeMillis();
     for (int i=0; i<steps || steps==-1; i++) {
 		  paintGuard=true;
-			while (painting) {};
+			while (painting) {}
       timeStep();
 			paintGuard=false;
       repaint();
@@ -166,6 +162,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
     //frame.makeFinal();
     frame.addWindowListener(
       new WindowAdapter() {
+            @Override
         public void windowClosing(WindowEvent e) {
           if (okToLoseUnsaved()) System.exit(0);
         }
@@ -305,6 +302,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
 	public double radiusSq(double x1, double y1, double x2, double y2) {
 	  return Math.pow(x1-x2,2)+Math.pow(y1-y2,2);
 	}
+    @Override
   public void mouseClicked(MouseEvent e) {
     // Invoked when the mouse button has been clicked (pressed and released) on a component.
     mousePress=e.getPoint();
@@ -341,23 +339,28 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
 			}
 		}
   }
+    @Override
   public void mouseEntered(MouseEvent e) {
     // Invoked when the mouse enters a component.
   }
+    @Override
   public void mouseExited(MouseEvent e) {
     // Invoked when the mouse exits a component.
   }
+    @Override
   public void mousePressed(MouseEvent e) {
     // Invoked when a mouse button has been pressed on a component.
     mousePress=e.getPoint();
     mouseDrag=e.getPoint();
     dragging=true;
   }
+    @Override
   public void mouseReleased(MouseEvent e) {
     // Invoked when a mouse button has been released on a component.
     dragging=false;
     repaint();
   }
+    @Override
   public void mouseDragged(MouseEvent e) {
     // Invoked when a mouse button is pressed on a component and then dragged.
     Point newPos=e.getPoint();
@@ -368,10 +371,12 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
     mouseDrag=e.getPoint();
     repaint();
   }
+    @Override
   public void mouseMoved(MouseEvent e) {
     // Invoked when the mouse cursor has been moved onto a component but no buttons have been pushed.
   }
 
+    @Override
   public void actionPerformed(ActionEvent e) {
     // Invoked when an action occurs (like button clicking).
     Object source=e.getSource();
@@ -443,7 +448,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
           if (world!=null) info.setText(world.getLinkSystem().size()+" links, "+world.getNumTets()+" tets, "+world.getNumPoints()+" points, "+world.getNumPlates()+" plates");
 				} catch (Exception ex) {
 				  System.out.println("Error converting from File to String!?!?: "+ex);
-					ex.printStackTrace();
+					ex.printStackTrace( System.out );
 				}
 			}
 			repaint();
@@ -472,11 +477,13 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
         source.equals(stressColorMenuItem)) repaint();
   }
 
+    @Override
   public void stateChanged(ChangeEvent e) {
     // Invoked when the target of the listener has changed its state.
     Object source=e.getSource();
   }
 
+    @Override
   public void paint(Graphics g) {
 	  painting=true;
     int width=getWidth();
@@ -553,7 +560,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
 	    Color c1,c2;
 	    if (!paintGuard && !dragging && world.getNumTets()>0 && (plateGridMenuItem.getState() || planetaryGridMenuItem.getState())) {
 	      Point3d p1,p2,p3,p4;
-	      Vector tempVec=new Vector(world.getLinkSystem().getCollection());
+	      ArrayList tempVec=new ArrayList(world.getLinkSystem().getCollection());
 	      for (int i=0; i<tempVec.size(); i++) {
 	        LinkPair lp=(LinkPair)tempVec.get(i);
 	        p1=lp.getA().rotPos();

@@ -16,7 +16,7 @@ import java.util.*;
 
 
 
-class TecPoint implements Comparable {
+public class TecPoint implements Comparable {
   private World world=null;
   private Point3d pos, oldpos, rotPos;
   private TecPlate plate=null;
