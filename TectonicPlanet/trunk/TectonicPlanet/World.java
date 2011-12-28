@@ -979,9 +979,9 @@ public class World {
   	ArrayList tris = new ArrayList();
   	for (int i = 0; i < tets.size(); i++) {
 	    Triangle triangle = ((Tet) tets.get(i)).getTopTriangle();
-	    triangle.checkWayUp();
-	    triangle.logArea();
-	    triangle.logCenter();
+	    triangle.cacheIsFacingUp();
+	    triangle.cacheArea();
+	    triangle.cacheCenter();
 	    if (triangle.isEdge())
         tris.add(triangle);
     }
@@ -1410,7 +1410,7 @@ public class World {
   	int invCount = 0;
   	for (int i_178_ = 0; i_178_ < tris.size(); i_178_++) {
   	  Triangle triangle = (Triangle) tris.get(i_178_);
-  	  if (triangle.facingUp != triangle.wayUp())
+  	  if (triangle.facingUp != triangle.isFacingUp())
         invCount++;
   	}
   	System.out.println(invCount+" triangles inverted");
