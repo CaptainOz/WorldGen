@@ -1,8 +1,14 @@
 package TectonicPlanet;
 
-// Standard Java imports
 import javax.vecmath.*;
 
+/**
+ * A Triangle is a single part of a tectonic plate. It is the smallest unit used
+ * to calculate movements and topology.
+ *
+ * @author Tom Groves
+ * @author Nate Lillich
+ */
 class Triangle {
     public TecPoint p1, p2, p3;
     public boolean facingUp;
