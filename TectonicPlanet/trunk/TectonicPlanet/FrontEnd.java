@@ -99,6 +99,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
     stopButton.setEnabled(false);
     running=false;
 		Tet.goneBad=false;
+        repaint();
   }
 	
   private void initGUI() {
