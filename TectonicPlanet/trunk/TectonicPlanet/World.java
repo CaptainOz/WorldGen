@@ -217,7 +217,7 @@ public class World {
             gridBoxAdd( (Tet)m_tets.get( i ) );
 
         // Mantle upwelling points
-        System.out.print( "Randomizing mantle upwellings." );
+        System.out.println( "Randomizing mantle upwellings." );
         randomiseUpwellings();
 
         // And done.
@@ -252,38 +252,60 @@ public class World {
         }
     }
 
-    public void supercontinentBreakup(){
-        // Move the mantle upwellings.
-        // Try to place them underneath major landmasses, to initiate breakup of any supercontinents
-        for( int i_21_ = 0; i_21_ < m_numMantlePoints; i_21_++ ){
-            System.out.println( "Moving manthle point #" + (i_21_ + 1) + " of " + m_numMantlePoints );
+    /**
+     * Adjusts the positions of mantle upwellings such that they are more likely
+     * to cause supercontinents to break apart.
+     */
+    public void breakUpSuperContinents(){
+        // Move the mantle upwellings and try to place them underneath major
+        // landmasses to initiate breakup of any supercontinents
+        for( int i = 0; i < m_numMantlePoints; ++i ){
+            System.out.println( "Moving mantle point " + (i + 1) + " of " + m_numMantlePoints );
+
+            // Shuffle the upwelling point randomly, until it _isn't_ too close
+            // to the other points
             boolean ok = true;
-            // Shuffle the upwelling point randomly, until it _isn't_ too close to the other points
+            double closestUpwelling;
+            double volume;
             do {
                 ok = true;
-                Vector3d vector3d = getRandomVector();
-                vector3d.scale( m_planetRadius );
-                m_mantlePoint[i_21_] = new Point3d( vector3d.x, vector3d.y, vector3d.z );
+                Vector3d pointPos = getRandomVector();
+                pointPos.scale( m_planetRadius );
+                Point3d pointI   = new Point3d( pointPos.x, pointPos.y, pointPos.z );
+                m_mantlePoint[i] = pointI;
+
                 // Check for other points close by
-                for( int i_22_ = 0; i_22_ < i_21_; i_22_++ ){
-                    if( i_22_ != i_21_ && m_mantlePoint[i_22_].distance( m_mantlePoint[i_21_] ) < 3000.0 )
-                        ok = false;
+                closestUpwelling = m_planetRadius * 3; // Impossibly far.
+                for( int k = 0; k < i; ++k ){
+                    Point3d pointK  = m_mantlePoint[k];
+                    double  distance = pointK.distance( pointI );
+                    if( distance < closestUpwelling ){
+                        closestUpwelling = distance;
+                    }
                 }
+                
                 // Check for the amount of deep rock overhead
-                double vol = 0;
-                for( int p = 0; p < m_points.size(); p++ ){
+                volume = 0;
+                for( int p = 0; p < m_points.size(); ++p ){
                     TecPoint tp = getPoint( p );
-                    double dist = m_mantlePoint[i_21_].distance( tp.getPos() );
-                    if( dist < 3000 )
-                        vol += tp.getArea() * tp.getDepth() * (3000 - dist) / 3000;
+                    double distance = pointI.distance( tp.getPos() );
+                    if( distance < 3000 ){
+                        double area  = tp.getArea();
+                        double depth = tp.getDepth();
+                        volume += area * depth * (3000 - distance) / 3000;
+                    }
                 }
-                vol = vol / 10000000; // Rough estimate of the average depth of rock (ocean floor is ~7km thick)
-                //System.out.println(vol);
-                if( Math.random() < Math.pow( 8 / vol, 2 ) && Math.random() < 0.999 )
-                    ok = false;  // Make sure we don't get stuck forever on a young world
-            } while( !ok );
+
+                // Rough estimate of the average depth of rock (ocean floor is
+                // ~7km thick).
+                // Make sure we don't get stuck forever on a young world
+                // TODO: What units is this in? Millimeters?
+                volume /= 10000000;
+                if( Math.random() < Math.pow( 8 / volume, 2 ) && Math.random() < 0.7 )
+                    ok = false;
+            } while( !ok && closestUpwelling < 3000.0 );
         }
-        System.out.println( "...done!" );
+        System.out.println( "Done adjusting mantle points." );
     }
 
     public void initGridBoxSystems(){

@@ -462,7 +462,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
     }
     if (source.equals(breakupItem) && !running && world!=null) {
       System.out.println("Moving mantle upwellings to break up continents.");
-      world.supercontinentBreakup();
+      world.breakUpSuperContinents();
 			repaint();
     }
     
@@ -664,7 +664,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
     }
     if (world.getEpoch()%2000==0 && repeatedBreakupMenuItem.getState()) {
       System.out.println("Randomising positions of mantle upwellings to breakup supercontinents.");
-      world.supercontinentBreakup();
+      world.breakUpSuperContinents();
     }
     if (world.getEpoch()%20==0) world.saveElevationHistogram();
   }
