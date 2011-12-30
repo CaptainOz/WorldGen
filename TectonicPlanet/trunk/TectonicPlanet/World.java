@@ -73,7 +73,7 @@ public class World {
         int numPlates = 10;
         initStorage();
         initColors();
-        initPoints( numPlates );
+        _initPoints( numPlates );
     }
 
     /**
@@ -96,7 +96,7 @@ public class World {
         this.m_numMantlePoints = mantlePoints;
         initStorage();
         initColors();
-        initPoints( numPlates );
+        _initPoints( numPlates );
     }
 
     /**
@@ -157,7 +157,7 @@ public class World {
      *
      * @param numPlates The number of tectonic plates to create points for.
      */
-    private void initPoints( int numPlates ){
+    private void _initPoints( int numPlates ){
         // Build a new planet
         Tet.planetRadius = m_planetRadius;
 
@@ -225,21 +225,30 @@ public class World {
         m_altered = true;
     }
 
+    /**
+     * Places the mantel upwellings in random locations.
+     */
     public void randomiseUpwellings(){
-        for( int i_21_ = 0; i_21_ < m_numMantlePoints; i_21_++ ){
-            boolean ok = true;
-            // Shuffle the upwelling point randomly, until it _isn't_ too close to the other points
+        for( int i = 0; i < m_numMantlePoints; ++i ){
+            // Shuffle the upwelling point randomly, until it _isn't_ too close
+            // to the other points.
+            double closestUpwelling;
             do {
-                ok = true;
-                Vector3d vector3d = getRandomVector();
-                vector3d.scale( m_planetRadius );
-                m_mantlePoint[i_21_] = new Point3d( vector3d.x, vector3d.y, vector3d.z );
+                Vector3d pointPos = getRandomVector();
+                pointPos.scale( m_planetRadius );
+                Point3d pointI   = new Point3d( pointPos.x, pointPos.y, pointPos.z );
+                m_mantlePoint[i] = pointI;
+
                 // Check for other points close by
-                for( int i_22_ = 0; i_22_ < i_21_; i_22_++ ){
-                    if( i_22_ != i_21_ && m_mantlePoint[i_22_].distance( m_mantlePoint[i_21_] ) < 3000.0 )
-                        ok = false;
+                closestUpwelling = m_planetRadius * 3; // Impossibly far.
+                for( int k = 0; k < i; ++k ){
+                    Point3d pointK  = m_mantlePoint[k];
+                    double distance = pointK.distance( pointI );
+                    if( distance < closestUpwelling ){
+                        closestUpwelling = distance;
+                    }
                 }
-            } while( !ok );
+            } while( closestUpwelling < 3000.0 );
         }
     }
 
