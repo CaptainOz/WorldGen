@@ -11,16 +11,11 @@ import java.awt.*;
  * @author Nate Lillich
  */
 public class TextFrontEnd implements Runnable {
+    // The World that we do all the work on
+    private World m_world = null;
 
-    private World world=null;	// The World that we do all the work on
-
-    // GUI bits
-    private double rotation1=0, rotation2=0;
-    private double zoom=6600;		// km^-1 scaling factor
-    private boolean running=false, paintGuard=false, painting=false;
-    private int steps=1;
-    private PointViewer pointViewer=null;
-    private ColorMap temperatureColorMap;
+    // The limit to how many steps to take.
+    private int m_stepLimit = 1;
 
     /**
      * The <code>main</code> method is the entry-point for calls from the
@@ -45,40 +40,54 @@ public class TextFrontEnd implements Runnable {
         }
     }
 
+    /**
+     * Creates a new world and sets the limit to how many steps to iterate.
+     *
+     * @param stepCount The limit to how many steps to take.
+     */
     public void init( String stepCount ){
         // Create a new world and run it for stepCount steps.
-        newWorld();
-        steps = Integer.parseInt( stepCount );
+        createNewWorld();
+        m_stepLimit = Integer.parseInt( stepCount );
         new Thread( this ).start();
     }
 
+    /**
+     * Loads an existing world file and sets the limit on how many steps to take.
+     *
+     * @param stepCount The limit to how many steps to take.
+     * @param filename  The name of a file to load a world from.
+     */
     public void init( String stepCount, String filename ){
         // Load the world saved in the given file and run it for stepCount steps.
         loadWorld( filename );
-        steps = Integer.parseInt( stepCount );
+        m_stepLimit = Integer.parseInt( stepCount );
         new Thread( this ).start();
     }
 
+    /**
+     * Runs the simulation for as many steps as this was created to run.
+     */
     @Override
+    @SuppressWarnings( "CallToThreadYield" )
     public void run(){
         // Let the user and the program know the simulation is running.
-        running = true;
         System.out.print( "Timestepping..." );
 
         // Step the simulation as many times as requested. Lets also keep track
         // of the time so the user has some idea of what to expect.
         long time = System.currentTimeMillis();
-        for( int i = 0; i < steps; ++i ){
+        for( int i = 0; i < m_stepLimit; ++i ){
             // Step.
             timeStep();
             Thread.yield();
             System.out.println(
-                "*** Finished step " + (i + 1) + " of " + steps + " ***"
+                "*** Finished step " + (i + 1) + " of " + m_stepLimit + " ***"
             );
 
             // Compute the remaining time in seconds.
             double average = (System.currentTimeMillis() - time) / (1000.0f * (i + 1));
-            double remaining = average * (steps - i - 1);
+            double remaining = average * (m_stepLimit - i - 1);
             System.out.println(
                 "*** Estimated time remaining: " + (remaining / 60f)
               + " minutes (" + ((int)remaining) + " seconds)\n"
@@ -88,7 +97,7 @@ public class TextFrontEnd implements Runnable {
             // TODO: Why are we setting the steps to 1 here? Is it just to break
             //       out of the loop?
             if( Tet.goneBad ){
-                steps = 1;
+                m_stepLimit = 1;
                 break;
             }
         }
@@ -97,29 +106,33 @@ public class TextFrontEnd implements Runnable {
         final long   runTime = System.currentTimeMillis() - time;
         final double runTimeMinutes = runTime / 60000.0;
         System.out.println( "Done in " + runTimeMinutes + " minutes!" );
-        running = false;
         Tet.goneBad = false;
     }
 
-    public double radiusSq( double x1, double y1, double x2, double y2 ){
-        return Math.pow( x1 - x2, 2 ) + Math.pow( y1 - y2, 2 );
-    }
+    /**
+     * Creates a new world from scratch.
+     */
+    public void createNewWorld(){
+        m_world = new World();
 
-    public void newWorld(){
-        world=new World();
-        // Sort out the colors
-        for( int i = 0; i < world.getNumPoints(); ++i ){
-            TecPoint point      = world.getPoint( i );
+        // FIXME: This should be handled by the world class.
+        for( int i = 0; i < m_world.getNumPoints(); ++i ){
+            TecPoint point      = m_world.getPoint( i );
             final double height = point.getSurfaceHeight();
-            final Color  color  = world.getColorMap().map( height );
+            final Color  color  = m_world.getColorMap().map( height );
             point.setColor( color );
         }
     }
 
+    /**
+     * Loads a world from a file.
+     *
+     * @param filename The name of the file to load the world from.
+     */
     public void loadWorld( String filename ){
         try {
             File file = new File( filename );
-            world     = new World( file.getCanonicalPath() );
+            m_world   = new World( file.getCanonicalPath() );
         }
         catch( Exception e ){
             System.err.println( "Error loading world: " + filename );
@@ -128,23 +141,26 @@ public class TextFrontEnd implements Runnable {
         }
     }
 
+    /**
+     * Moves the simulation forward by one unit of time.
+     */
     private void timeStep(){
-        world.timeStep();
+        m_world.timeStep();
         //world.oceanTimeStep();
 
         // Set Colours
-        for( int i = 0; i < world.getNumPoints(); i++ ){
-            TecPoint point      = world.getPoint( i );
+        for( int i = 0; i < m_world.getNumPoints(); i++ ){
+            TecPoint point      = m_world.getPoint( i );
             final double height = point.getSurfaceHeight();
-            final Color  color  = world.getColorMap().map( height );
+            final Color  color  = m_world.getColorMap().map( height );
             point.setColor( color );
         }
 
         // Save the files every 20 steps.
-        final int step = world.getEpoch();
+        final int step = m_world.getEpoch();
         if( step % 20 == 0 ){
-            world.saveJPGsequence();
-            world.save();
+            m_world.saveJPGsequence();
+            m_world.save();
         }
     }
 }
