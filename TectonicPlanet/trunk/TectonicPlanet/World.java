@@ -13,6 +13,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.BufferedWriter;
 import java.io.PrintWriter;
@@ -308,6 +309,9 @@ public class World {
         System.out.println( "Done adjusting mantle points." );
     }
 
+    /**
+     * Initialize the two grid box systems.
+     */
     public void initGridBoxSystems(){
         // Allocate the normal gridBox.
         m_gridSize = (int)Math.ceil( m_planetRadius / (m_pointSpacing * 1.1) - 1 );
@@ -322,121 +326,88 @@ public class World {
 
         // Initialise the tetGridBox system
         m_tetGridSize = 15;
-        System.out.println( "tetGrid is " + m_tetGridSize + "^3" );
-        m_tetGridBox = new HashSet[m_tetGridSize][m_tetGridSize][m_tetGridSize];
-        for( int i = 0; i < m_tetGridSize; i++ ){
-            for( int j = 0; j < m_tetGridSize; j++ ){
-                for( int k = 0; k < m_tetGridSize; k++ )
-                    m_tetGridBox[i][j][k] = null;
+        m_tetGridBox  = new HashSet[m_tetGridSize][m_tetGridSize][m_tetGridSize];
+        for( int z = 0; z < m_tetGridSize; z++ ){
+            for( int y = 0; y < m_tetGridSize; y++ ){
+                for( int x = 0; x < m_tetGridSize; x++ )
+                    m_tetGridBox[z][y][x] = null;
             }
         }
     }
 
     /**
-     * loads a World from the given file
-     * @param filename	the filename of the file to load the World from
+     * Loads a World from the given file.
+     *
+     * @param filename  The filename of the file to load the World from.
      */
     final public void load( String filename ){
-        System.out.println( "\n\nLoading file " + filename + "..." );
-        try {
-            DataInputStream datainputstream = new DataInputStream( new FileInputStream( filename ) );
-            // Epoch
-            try {
-                m_epoch = datainputstream.readInt();
-            }
-            catch( Exception exception ){
-                System.out.println( "Error reading epoch - " + exception.toString() );
-                exception.printStackTrace( System.out );
-            }
-            // Planet radius
-            try {
-                m_planetRadius = datainputstream.readDouble();
-            }
-            catch( Exception exception ){
-                System.out.println( "Error reading planetRadius - " + exception.toString() );
-                exception.printStackTrace( System.out );
-            }
-            // Km
-            try {
-                m_pointSpacing = datainputstream.readInt();
-            }
-            catch( Exception exception ){
-                System.out.println( "Error reading km - " + exception.toString() );
-                exception.printStackTrace( System.out );
-            }
-            // Mantle points
-            m_numMantlePoints = datainputstream.readInt();
-            m_mantleFlowStrength = new double[m_numMantlePoints];
-            m_mantlePoint = new Point3d[m_numMantlePoints];
-            for( int i = 0; i < m_numMantlePoints; i++ ){
-                m_mantlePoint[i] = new Point3d();
-                m_mantleFlowStrength[i] = datainputstream.readDouble();
-                m_mantlePoint[i].x = datainputstream.readDouble();
-                m_mantlePoint[i].y = datainputstream.readDouble();
-                m_mantlePoint[i].z = datainputstream.readDouble();
-            }
+        // The world files are plain binary files with the data laid out as
+        // follows:
+        //
+        // epoch           (int)
+        // planetRadius    (double)
+        // pointSpacing    (int)
+        // numMantlePoints (int)
+        // mantle data
+        //   mantleFlowStrength (double)
+        //   mantlePointX       (double)
+        //   mantlePointY       (double)
+        //   mantlePointZ       (double)
+        // numColorPoints  (int)
+        // color data
+        //   value              (double)
+        //   rgb                (int)
+        // numPlates       (int)
+        // numPoints       (int)
+        // tec point data
+        //   pointX             (double)
+        //   pointY             (double)
+        //   pointZ             (double)
+        //   pointDepth         (int)
+        //   pointSize          (double)
+        //   plateId            (int)
+        //   magmaDensity       (double)
+        //   baseDepthOffset    (double)
+        //   rockThickness      (double)
+        //   density            (double)
 
-            // ColorMap
-            m_colorMap = new ColorMap();
-            int r = datainputstream.readInt();
-            for( int i_25_ = 0; i_25_ < r; i_25_++ ){
-                double v = datainputstream.readDouble();
-                int rgb = datainputstream.readInt();
-                m_colorMap.add( v, new Color( rgb ) );
-            }
-            initColors(); // Reset the colours to the built-in ones
-            // Number of plates
-            m_plates = new ArrayList();
-            int numPlates = datainputstream.readInt();
-            for( int i_28_ = 0; i_28_ < numPlates; i_28_++ )
-                m_plates.add( new TecPlate( 0.0, 0.0, 0.0 ) );
-            // Number of points
-            m_points = new ArrayList();
-            int numPoints = datainputstream.readInt();
-            for( int i_30_ = 0; i_30_ < numPoints; i_30_++ ){
-                TecPoint tecpoint = new TecPoint( this, datainputstream.readDouble(), datainputstream.readDouble(), datainputstream.readDouble(), datainputstream.readInt() );
-                // And its size
-                tecpoint.setSize( datainputstream.readDouble() );
-                // And the number of its plate
-                tecpoint.setPlate( getPlate( datainputstream.readInt() ) );
-                // And its RockColumn
-                tecpoint.setMagmaDensity( datainputstream.readDouble() );
-                tecpoint.setBaseDepthOffset( datainputstream.readDouble() );
-                tecpoint.setRockThickness( datainputstream.readDouble() );
-                tecpoint.setDensity( datainputstream.readDouble() );
-                addPoint( tecpoint );
-            }
-            System.out.println( "Read " + numPoints + " points" );
-            datainputstream.close();
+        System.out.println( "Loading file " + filename + "..." );
+        try {
+            int numPlates = _readFile( filename );
             m_altered = false;
 
             // Now sort out the bare planet we just loaded...
             Tet.planetRadius = m_planetRadius;
-            m_linkSystem = new LinkSystem();
-            m_imageSettings = new ImageSettings();
-            System.out.println( "Centering plates" );
-            for( int i_35_ = 0; i_35_ < numPlates; i_35_++ )
-                getPlate( i_35_ ).center();
+            m_linkSystem     = new LinkSystem();
+            m_imageSettings  = new ImageSettings();
+            System.out.println( "Centering plates." );
+            for( int i = 0; i < numPlates; ++i ){
+                getPlate( i ).center();
+            }
 
             // Init the gridBox system
+            System.out.println( "Allocating grid boxes." );
             initGridBoxSystems();
 
             // Delaunay the whole planet
-            long l = System.currentTimeMillis();
-            System.out.println( "Delaunaying planet" );
+            System.out.println( "Delaunaying planet." );
             Tet.biggestError = 0.0;
             m_tets = null;
             delaunay();
             resetTetGridSystem();
             pourOnWater();
 
-            // Set Colours
-            for( int i_39_ = 0; i_39_ < getNumPoints(); i_39_++ )
-                getPoint( i_39_ ).setColor( m_colorMap.map( getPoint( i_39_ ).getSurfaceHeight() - TecPoint.seaLevel ) );
-            // store interpolated colours in the links
+            // Set Colors
+            for( int i = 0; i < getNumPoints(); ++i ){
+                TecPoint point  = getPoint( i );
+                double   height = point.getSurfaceHeight();
+                point.setColor( m_colorMap.map( height - TecPoint.seaLevel ) );
+            }
+
+            // Store interpolated colors in the links.
             Color c1, c2;
             ArrayList tempVec = new ArrayList( getLinkSystem().getCollection() );
-            for( int i = 0; i < tempVec.size(); i++ ){
+            for( int i = 0; i < tempVec.size(); ++i ){
                 LinkPair lp = (LinkPair)tempVec.get( i );
                 c1 = lp.getA().getColor();
                 c2 = lp.getB().getColor();
@@ -4636,5 +4607,87 @@ public class World {
                 point.addLayer( thickness, 2.6f );
             }
         }
+    }
+
+    /**
+     * Reads the data out of the named file and loads it into this world.
+     * @throws FileNotFoundException
+     * @throws IOException
+     *
+     * @param filename The name of the file to read.
+     *
+     * @return The number of plates specified in the file.
+     */
+    private int _readFile( String filename )
+            throws FileNotFoundException, IOException {
+        DataInputStream data = new DataInputStream( new FileInputStream( filename ) );
+        // Load the epoch, planet radius, and point spacing first.
+        try {
+            m_epoch        = data.readInt();
+            m_planetRadius = data.readDouble();
+            m_pointSpacing = data.readInt();
+        }
+        catch( Exception exception ){
+            System.out.println( "Error reading file - " + exception.toString() );
+            exception.printStackTrace( System.out );
+        }
+
+        // Load mantle points and flow strength
+        m_numMantlePoints    = data.readInt();
+        m_mantleFlowStrength = new double[m_numMantlePoints];
+        m_mantlePoint        = new Point3d[m_numMantlePoints];
+        for( int i = 0; i < m_numMantlePoints; ++i ){
+            m_mantleFlowStrength[i] = data.readDouble();
+            Point3d point = new Point3d();
+            point.x = data.readDouble();
+            point.y = data.readDouble();
+            point.z = data.readDouble();
+            m_mantlePoint[i] = point;
+        }
+
+        // Load the ColorMap
+        m_colorMap      = new ColorMap();
+        int numColorPoints = data.readInt();
+        for( int i = 0; i < numColorPoints; ++i ){
+            double value = data.readDouble();
+            int    rgb   = data.readInt();
+            m_colorMap.add( value, new Color( rgb ) );
+        }
+        initColors(); // Reset the colours to the built-in ones
+
+        // Load the number of plates and create that many default plates.
+        m_plates      = new ArrayList();
+        int numPlates = data.readInt();
+        for( int i = 0; i < numPlates; ++i ){
+            m_plates.add( new TecPlate( 0.0, 0.0, 0.0 ) );
+        }
+
+        // Load the point data
+        m_points = new ArrayList();
+        int numPoints = data.readInt();
+        for( int i = 0; i < numPoints; ++i ){
+            TecPoint tecpoint = new TecPoint(
+                this,               // Owning world
+                data.readDouble(),  // X
+                data.readDouble(),  // Y
+                data.readDouble(),  // Z
+                data.readInt()      // Depth
+            );
+
+            // Next comes its size and plateId.
+            tecpoint.setSize(  data.readDouble() );
+            tecpoint.setPlate( getPlate( data.readInt() ) );
+
+            // After that is the rock column data.
+            tecpoint.setMagmaDensity(    data.readDouble() );
+            tecpoint.setBaseDepthOffset( data.readDouble() );
+            tecpoint.setRockThickness(   data.readDouble() );
+            tecpoint.setDensity(         data.readDouble() );
+
+            // Finally, add the point.
+            addPoint( tecpoint );
+        }
+        data.close();
+        return numPlates;
     }
 }
