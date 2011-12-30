@@ -99,18 +99,27 @@ public class World {
         initPoints( numPlates );
     }
 
+    /**
+     * Initializes the various arrays used to store the data about the world.
+     */
     private void initStorage(){
         m_points = new ArrayList();
         m_plates = new ArrayList();
-        m_mantleFlowStrength = new double[m_numMantlePoints];
-        m_mantlePoint = new Point3d[m_numMantlePoints];
-        m_linkSystem = new LinkSystem();
+        m_mantlePoint   = new Point3d[ m_numMantlePoints ];
+        m_linkSystem    = new LinkSystem();
         m_imageSettings = new ImageSettings();
+        m_mantleFlowStrength = new double[ m_numMantlePoints ];
     }
 
+    /**
+     * Initializes the default color map.
+     */
     private void initColors(){
         // Defines the colour ranges used for displaying/saving images
         m_colorMap = new ColorMap();
+
+        // TODO: Figure out why these are commented out. Is this some debugging
+        //       code?
         /*colorMap.add(-3.6f, Color.black);
         colorMap.add(-0.1f, Color.blue);
         colorMap.add(0.0f, Color.green);
@@ -143,6 +152,11 @@ public class World {
         m_colorMap.add( 10, new Color( 255, 255, 255 ) );
     }
 
+    /**
+     * Creates the points that define the shape of the tectonic plates.
+     *
+     * @param numPlates The number of tectonic plates to create points for.
+     */
     private void initPoints( int numPlates ){
         // Build a new planet
         Tet.planetRadius = m_planetRadius;
@@ -154,41 +168,25 @@ public class World {
             addPlate( new TecPlate( vector3d.x, vector3d.y, vector3d.z ) );
             getPlate( i_1_ ).densityTweak = Math.random() * 0.15;
         }
-        m_pointSpacing = 360;	// Point spacing, in km  (120km=75miles, 160km=100miles)
 
-        double randomness = 1.0; // The random jiggle given to the position of each point
-        double equatorCircum = 2 * Math.PI * m_planetRadius;
-        System.out.println( "Planet circumference=" + equatorCircum + " km" );
-        int latStep = (int)(equatorCircum / (double)(m_pointSpacing * 2));
-        System.out.println( "Grid spacing of " + m_pointSpacing + " km gives " + latStep + " points from pole to pole\n" );
-        System.out.print( "Doing latitude " );
+        // The totalLatCount is the number of latitude steps there are from the
+        // south pole up to the north pole.
+        double dblPointSpace = (double)(m_pointSpacing * 2);
+        double planetCircum  = 2 * Math.PI * m_planetRadius;
+        double totalLatCount = (int)(planetCircum / dblPointSpace);
 
-        for( int latCount = 0; latCount <= latStep; latCount++ ){
-            double lat = -90.0 + (double)latCount / (double)latStep * 180.0;
-            if( latCount % 2 == 0 )
-                System.out.print( ((int)lat) + "   " );
-            double circum = (2 * Math.PI * Math.cos( Math.toRadians( lat ) ) * m_planetRadius);
-            int numPoints = (int)(circum / (double)m_pointSpacing); // The number of points which will fit on thisline of latitude
-            for( int i_8_ = 0; i_8_ <= numPoints; i_8_++ ){
-                double lon = (double)i_8_ / (double)(numPoints + 1) * 360.0;
-                TecPoint tecpoint = new TecPoint( lat + Math.random() * randomness, lon + Math.random() * randomness, m_planetRadius, false, m_epoch );
-                // Find closest plate
-                int cp = 0;
-                double cdist = tecpoint.getPos().distance( getPlate( 0 ).getPos() );
-                for( int i_12_ = 1; i_12_ < m_plates.size(); i_12_++ ){
-                    if( tecpoint.getPos().distance( getPlate( i_12_ ).getPos() ) < cdist ){
-                        cp = i_12_;
-                        cdist = tecpoint.getPos().distance( getPlate( i_12_ ).getPos() );
-                    }
-                }
-                tecpoint.setPlate( getPlate( cp ) );
-                tecpoint.setSize( (double)(m_pointSpacing / 2) );
-                // This bit _would_ make a circular continent in the middle of each plate, if uncommented
-                //if (cdist>1500) p.makeNewOceanFloor();
-                //else p.addLayer(new RockLayer(15,2.6));	// Make it all continental crust
-                addPoint( tecpoint );
-            }
+        // Figure out the location of each latitude line and calculate all the.
+        // points along it.
+        for( int latCount = 0; latCount <= totalLatCount; latCount++ ){
+            // Calculate the latitude angle of offset from the equator and its
+            // circumference.
+            double latAngle  = -90.0 + (double)latCount / totalLatCount * 180.0;
+            double latRadius = Math.cos( Math.toRadians( latAngle ) ) * m_planetRadius;
+            double latCircum = (2 * Math.PI * latRadius);
+
+            _calcLatPoints( latCircum, latAngle );
         }
+
         // Make some of the plates continental
         for( int i_13_ = 0; i_13_ < numPlates; i_13_++ ){
             boolean ocean = false;
@@ -4519,5 +4517,83 @@ public class World {
         trans.rotX( Math.random() * 2 * Math.PI );
         trans.transform( out );
         return out;
+    }
+
+    /**
+     * Calculates all the points along a given latitude and assigns them to the
+     * closest point.
+     *
+     * @param latCircum The circumference of the latitude line.
+     * @param latAngle  The angle from the equator in degrees.
+     */
+    private void _calcLatPoints( double latCircum, double latAngle ){
+        // Calculate the number of points that will fit on this lat line.
+        int maxLatPoints = (int)(latCircum / (double)m_pointSpacing);
+
+        // Generate all the points on the line.
+        for( int i = 0; i <= maxLatPoints; i++ ){
+            // Calculate the longitude of the point and add some randomness.
+            double lon = (double)i / (double)(maxLatPoints + 1) * 360.0;
+            double adjustedAngle = latAngle + Math.random();
+            double adjustedLon   = lon + Math.random();
+
+            TecPoint tecPoint = new TecPoint(
+                adjustedAngle,
+                adjustedLon,
+                m_planetRadius,
+                false,
+                m_epoch
+            );
+
+            // Find closest plate to this point. Use the distance to plate 0 as
+            // a starting point.
+            tecPoint.setPlate( _findClosestPlate( tecPoint ) );
+            tecPoint.setSize( (double)(m_pointSpacing) / 2.0 );
+
+            // This bit _would_ make a circular continent in the middle of each
+            // plate, if uncommented.
+            //if (cdist>1500) p.makeNewOceanFloor();
+            //else p.addLayer(new RockLayer(15,2.6));	// Make it all continental crust
+
+            // Add the point!
+            addPoint( tecPoint );
+        }
+    }
+
+    /**
+     * Finds the plate that is closest to the point provided.
+     *
+     * @param tecPoint The point to find a plate for.
+     *
+     * @return The closest TecPlate.
+     */
+    private TecPlate _findClosestPlate( TecPoint tecPoint ){
+        TecPlate closestPlate    = null;
+        double   closestDistance = m_planetRadius * 3; // Impossibly far away.
+        for( int i = 0; i < m_plates.size(); ++i ){
+            // Calculate this plates distance from the point.
+            TecPlate plate         = getPlate( i );
+            double   plateDistance = _calcPlateDistance( plate, tecPoint );
+
+            // If this one is closer then use it!
+            if( plateDistance < closestDistance ){
+                closestPlate    = plate;
+                closestDistance = plateDistance;
+            }
+        }
+        return closestPlate;
+    }
+
+    /**
+     * Calculates the distance between the given point and the plate.
+     *
+     * @param plate     The plate to calculate the distance from.
+     * @param tecPoint  The point to calculate the distance to.
+     *
+     * @return The distance between the plate center and the point.
+     */
+    private double _calcPlateDistance( TecPlate plate, TecPoint tecPoint ){
+        Point3d plateCenter = plate.getPos();
+        return tecPoint.getPos().distance( plateCenter );
     }
 }
