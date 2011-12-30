@@ -57,6 +57,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
     }
 
     @Override
+    @SuppressWarnings( "CallToThreadYield" )
     public void run(){
         running = true;
         runButton.setEnabled( false );
@@ -66,12 +67,17 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
         uberStepButton.setEnabled( false );
         stepButton10000.setEnabled( false );
         stopButton.setEnabled( true );
-        System.out.print( "Timestepping..." );
+        System.out.println( "Timestepping..." );
         long time = System.currentTimeMillis();
         for( int i = 0; i < steps || steps == -1; i++ ){
             paintGuard = true;
-            while( painting ){
+            System.out.print( "Waiting for painting.." );
+            for( int k = 0; painting; ++k ){
+                if( k % 100 == 0 ){
+                    System.out.print( "." );
+                }
             }
+            System.out.println( "done." );
             timeStep();
             paintGuard = false;
             repaint();
@@ -80,7 +86,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
                 System.out.println( "*** Finished step " + (i + 1) + " of " + (steps) + " ***" );
                 double average = (System.currentTimeMillis() - time) / (1000.0f * (i + 1)); 	// seconds
                 double remaining = average * (steps - i - 1);	// seconds
-                System.out.println( "*** Estimated time remaining: " + (remaining / 60f) + " minutes (" + ((int)remaining) + " seconds)\n" );
+                System.out.println( "*** Estimated time remaining: " + ((int)remaining) + " seconds\n" );
             }
             else {
                 System.out.println( "*** Finished step " + (i + 1) + " ***" );
@@ -466,7 +472,12 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
                     else
                         world.load( file.getCanonicalPath() );
                     if( world != null )
-                        info.setText( world.getLinkSystem().size() + " links, " + world.getNumTets() + " tets, " + world.getNumPoints() + " points, " + world.getNumPlates() + " plates" );
+                        info.setText(
+                                world.getLinkSystem().size() + " links, "  +
+                                world.getNumTets()           + " tets, "   +
+                                world.getNumPoints()         + " points, " +
+                                world.getNumPlates()         + " plates, " +
+                                steps                        + " steps"    );
                 }
                 catch( Exception ex ){
                     System.out.println( "Error converting from File to String!?!?: " + ex );
