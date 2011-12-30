@@ -162,11 +162,12 @@ public class World {
         Tet.planetRadius = m_planetRadius;
 
         // First place numPlates random plates
-        for( int i_1_ = 0; i_1_ < numPlates; i_1_++ ){
+        for( int i = 0; i < numPlates; ++i ){
             Vector3d vector3d = getRandomVector();
             vector3d.scale( m_planetRadius );
-            addPlate( new TecPlate( vector3d.x, vector3d.y, vector3d.z ) );
-            getPlate( i_1_ ).densityTweak = Math.random() * 0.15;
+            TecPlate plate = new TecPlate( vector3d.x, vector3d.y, vector3d.z );
+            plate.densityTweak = Math.random() * 0.15;
+            addPlate( plate );
         }
 
         // The totalLatCount is the number of latitude steps there are from the
@@ -177,65 +178,50 @@ public class World {
 
         // Figure out the location of each latitude line and calculate all the.
         // points along it.
-        for( int latCount = 0; latCount <= totalLatCount; latCount++ ){
+        System.out.println( "Creating latitude points." );
+        for( int latCount = 0; latCount <= totalLatCount; ++latCount ){
             // Calculate the latitude angle of offset from the equator and its
             // circumference.
             double latAngle  = -90.0 + (double)latCount / totalLatCount * 180.0;
             double latRadius = Math.cos( Math.toRadians( latAngle ) ) * m_planetRadius;
             double latCircum = (2 * Math.PI * latRadius);
-
             _calcLatPoints( latCircum, latAngle );
         }
 
-        // Make some of the plates continental
-        for( int i_13_ = 0; i_13_ < numPlates; i_13_++ ){
-            boolean ocean = false;
-            if( Math.random() < 0.75 )
-                ocean = true;
-            for( int i_14_ = 0; i_14_ < getPlate( i_13_ ).getPoints().size(); i_14_++ ){
-                if( ocean )
-                    getPlate( i_13_ ).getPoint( i_14_ ).makeNewOceanFloor();
-                else
-                    getPlate( i_13_ ).getPoint( i_14_ ).addLayer( (float)(20.8 * (0.9 + 0.1 * Math.random())), 2.6f );
-            }
+        // Make some of the plates continental, the others will be ocean and
+        // then re-center the plates.
+        System.out.println( "Adjusting plate types." );
+        for( int i = 0; i < numPlates; ++i ){
+            boolean isOcean = Math.random() < 0.75;
+            TecPlate plate  = getPlate( i );
+            _setPlateType( plate, isOcean );
+            plate.center();
         }
 
-        // The rotation vector of the planet (for Coriolis Effect)
-        m_omega = new Vector3d( 0.0, 0.072722, 1.0E-13 ); // In radians/sec, should be 0.000072722
-        System.out.println( "\n" );
-        System.out.println( m_points.size() + " points" );
-        System.out.println( "Centering plates" );
-        // Re-center the plates
-        for( int i_16_ = 0; i_16_ < numPlates; i_16_++ )
-            getPlate( i_16_ ).center();
+        // The rotation vector of the planet (for Coriolis Effect) in
+        // radians/sec, should be 0.000072722
+        // FIXME: This is currently unused.
+        m_omega = new Vector3d( 0.0, 0.072722, 1.0E-13 );
 
         // Initialise the gridBox system
-        m_gridSize = (int)Math.ceil( -1.0 + m_planetRadius / ((double)m_pointSpacing * 1.1) );		// possibly change this to      -1+planetRadius/(km*1.1)
-        System.out.println( "Grid is " + m_gridSize + "^3" );
-        m_gridBox = new HashSet[m_gridSize][m_gridSize][m_gridSize];
-        for( int i_17_ = 0; i_17_ < m_gridSize; i_17_++ ){
-            for( int i_18_ = 0; i_18_ < m_gridSize; i_18_++ ){
-                for( int i_19_ = 0; i_19_ < m_gridSize; i_19_++ )
-                    m_gridBox[i_17_][i_18_][i_19_] = null;
-            }
-        }
-        initTetGridBoxSystem();
+        System.out.println( "Allocating grid boxes." );
+        initGridBoxSystems();
 
         // Delaunay the whole planet (for the first time)
-        long l = System.currentTimeMillis();
-        System.out.println( "Delaunaying planet" );
+        System.out.println( "Delaunaying planet." );
         Tet.biggestError = 0.0;
         delaunay();
 
         // Stick all the tets into the tetGridBox system
-        for( int i_20_ = 0; i_20_ < m_tets.size(); i_20_++ )
-            gridBoxAdd( (Tet)m_tets.get( i_20_ ) );
+        for( int i = 0; i < m_tets.size(); ++i )
+            gridBoxAdd( (Tet)m_tets.get( i ) );
 
         // Mantle upwelling points
-        System.out.print( "Doing mantle upwellings..." );
+        System.out.print( "Randomizing mantle upwellings." );
         randomiseUpwellings();
 
-        System.out.println( "done" );
+        // And done.
+        System.out.println( "Initialized." );
         m_altered = true;
     }
 
@@ -291,7 +277,18 @@ public class World {
         System.out.println( "...done!" );
     }
 
-    public void initTetGridBoxSystem(){
+    public void initGridBoxSystems(){
+        // Allocate the normal gridBox.
+        m_gridSize = (int)Math.ceil( m_planetRadius / (m_pointSpacing * 1.1) - 1 );
+        m_gridBox  = new HashSet[m_gridSize][m_gridSize][m_gridSize];
+        for( int z = 0; z < m_gridSize; ++z ){
+            for( int y = 0; y < m_gridSize; ++y ){
+                for( int x = 0; x < m_gridSize; ++x ){
+                    m_gridBox[z][y][x] = null;
+                }
+            }
+        }
+
         // Initialise the tetGridBox system
         m_tetGridSize = 15;
         System.out.println( "tetGrid is " + m_tetGridSize + "^3" );
@@ -391,16 +388,7 @@ public class World {
                 getPlate( i_35_ ).center();
 
             // Init the gridBox system
-            m_gridSize = (int)Math.ceil( -1.0 + m_planetRadius / ((double)m_pointSpacing * 1.1) );
-            System.out.println( "Grid is " + m_gridSize + "^3" );
-            m_gridBox = new HashSet[m_gridSize][m_gridSize][m_gridSize];
-            for( int i_36_ = 0; i_36_ < m_gridSize; i_36_++ ){
-                for( int i_37_ = 0; i_37_ < m_gridSize; i_37_++ ){
-                    for( int i_38_ = 0; i_38_ < m_gridSize; i_38_++ )
-                        m_gridBox[i_36_][i_37_][i_38_] = null;
-                }
-            }
-            initTetGridBoxSystem();
+            initGridBoxSystems();
 
             // Delaunay the whole planet
             long l = System.currentTimeMillis();
@@ -4595,5 +4583,27 @@ public class World {
     private double _calcPlateDistance( TecPlate plate, TecPoint tecPoint ){
         Point3d plateCenter = plate.getPos();
         return tecPoint.getPos().distance( plateCenter );
+    }
+
+    /**
+     * Sets the plate as either ocean floor or continent crust.
+     *
+     * @param plate   The plate to set the type of.
+     * @param isOcean Flag indicating if this plate should be ocean floor.
+     */
+    private void _setPlateType( TecPlate plate, boolean isOcean ){
+        // Loop through each of the points on the plate and either create new
+        // ocean floor or generate a random crust thickness.
+        ArrayList points = plate.getPoints();
+        for( int k = 0; k < points.size(); ++k ){
+            TecPoint point = (TecPoint)points.get( k );
+            if( isOcean ){
+                point.makeNewOceanFloor();
+            }
+            else {
+                float thickness = 20.8f * (0.9f + 0.1f * (float)Math.random());
+                point.addLayer( thickness, 2.6f );
+            }
+        }
     }
 }
