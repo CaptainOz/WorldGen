@@ -3912,7 +3912,7 @@ public class World {
             String worldsPath = worldsFolder.getAbsolutePath();
             int i = 0;
             do {
-                m_saveFile = new File( worldsPath + "World_" + (i++) + ".world" );
+                m_saveFile = new File( worldsPath + "/World_" + (i++) + ".world" );
             } while( m_saveFile.exists() );
         }
         catch( Exception e ){
