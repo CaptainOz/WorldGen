@@ -423,84 +423,27 @@ public class World {
     public void save(){
         System.out.print( "Saving..." );
         if( m_saveFile == null ){
-            // Find somewhere suitable to put this world
-            try {
-                if( !new File( "TectonicPlanet/Worlds" ).exists() )
-                    new File( "TectonicPlanet/Worlds" ).mkdirs();
-                int num = 1;
-                while( new File( "TectonicPlanet/Worlds/World" + num + ".world" ).exists() ){
-                    num++;
-                }
-                m_saveFile = new File( "TectonicPlanet/Worlds/World" + num + ".world" );
-            }
-            catch( Exception e ){
-                System.out.println( "Error finding suitable file to save to - " + e );
-                e.printStackTrace( System.out );
-            }
+            _openNewSaveFile();
         }
 
         try {
-            File file = new File( m_saveFile.getCanonicalPath() + ".bak" );
+            // Back up the existing save file.
             if( m_saveFile.exists() ){
                 // Remove the backup, if it exists
-                if( file.exists() )
-                    file.delete();
-                m_saveFile.renameTo( file );
-            }
-            DataOutputStream dataoutputstream = new DataOutputStream( new FileOutputStream( m_saveFile ) );
-            // Epoch
-            dataoutputstream.writeInt( m_epoch );
-            // Planet radius
-            dataoutputstream.writeDouble( m_planetRadius );
-            // Km
-            dataoutputstream.writeInt( m_pointSpacing );
-            // Mantle points
-            dataoutputstream.writeInt( m_numMantlePoints );
-            for( int i = 0; i < m_numMantlePoints; i++ ){
-                dataoutputstream.writeDouble( m_mantleFlowStrength[i] );
-                dataoutputstream.writeDouble( m_mantlePoint[i].x );
-                dataoutputstream.writeDouble( m_mantlePoint[i].y );
-                dataoutputstream.writeDouble( m_mantlePoint[i].z );
-            }
-            // ColorMap
-            dataoutputstream.writeInt( m_colorMap.size() );
-            for( int i = 0; i < m_colorMap.size(); i++ ){
-                dataoutputstream.writeDouble( m_colorMap.getValue( i ) );
-                dataoutputstream.writeInt( m_colorMap.getColor( i ).getRGB() );
-            }
-            // Number of plates
-            dataoutputstream.writeInt( m_plates.size() );
-            // Number of points
-            dataoutputstream.writeInt( m_points.size() );
-            for( int i = 0; i < m_points.size(); i++ ){
-                TecPoint tecpoint = getPoint( i );
-                // Save the point's position
-                dataoutputstream.writeDouble( tecpoint.getPos().x );
-                dataoutputstream.writeDouble( tecpoint.getPos().y );
-                dataoutputstream.writeDouble( tecpoint.getPos().z );
-                // And creation date
-                dataoutputstream.writeInt( tecpoint.getCreationDate() );
-                // And its size
-                dataoutputstream.writeDouble( tecpoint.getSize() );
-                // And the number of its plate
-                int plateNum = -1;
-                for( int i_41_ = 0; i_41_ < m_plates.size(); i_41_++ ){
-                    if( plateNum == -1 && getPlate( i_41_ ).equals( tecpoint.getPlate() ) )
-                        plateNum = i_41_;
+                File backup = new File( m_saveFile.getAbsolutePath() + ".bak" );
+                if( backup.exists() ){
+                    backup.delete();
                 }
-                dataoutputstream.writeInt( plateNum );
-                // And its RockColumn
-                dataoutputstream.writeDouble( tecpoint.getMagmaDensity() );
-                dataoutputstream.writeDouble( tecpoint.getBaseDepthOffset() );
-                dataoutputstream.writeDouble( tecpoint.getRockThickness() );
-                dataoutputstream.writeDouble( tecpoint.getDensity() );
+                m_saveFile.renameTo( backup );
             }
-            m_altered = false;
-            dataoutputstream.close();
+
+            // Now write the file.
+            _writeFile();
+
         }
-        catch( Exception exception ){
-            System.out.println( "Error while saving the world - " + exception.toString() );
-            exception.printStackTrace( System.out );
+        catch( Exception e ){
+            System.out.println( "Error saving the world - " + e.toString() );
+            e.printStackTrace( System.out );
         }
         System.out.println( "done!" );
     }
@@ -4689,5 +4632,91 @@ public class World {
         }
         data.close();
         return numPlates;
+    }
+
+    /**
+     * The opposite of _readFile, this writes the world to the current saveFile.
+     *
+     * @throws FileNotFoundException
+     * @throws IOException
+     */
+    private void _writeFile() throws FileNotFoundException, IOException {
+        DataOutputStream data = new DataOutputStream( new FileOutputStream( m_saveFile ) );
+
+        // Write the epoch, planet radius, and point spacing
+        data.writeInt( m_epoch );
+        data.writeDouble( m_planetRadius );
+        data.writeInt( m_pointSpacing );
+
+        // Next write the mantle points
+        data.writeInt( m_numMantlePoints );
+        for( int i = 0; i < m_numMantlePoints; ++i ){
+            data.writeDouble( m_mantleFlowStrength[i] );
+            data.writeDouble( m_mantlePoint[i].x );
+            data.writeDouble( m_mantlePoint[i].y );
+            data.writeDouble( m_mantlePoint[i].z );
+        }
+
+        // Then the ColorMap
+        data.writeInt( m_colorMap.size() );
+        for( int i = 0; i < m_colorMap.size(); ++i ){
+            data.writeDouble( m_colorMap.getValue( i ) );
+            data.writeInt( m_colorMap.getColor( i ).getRGB() );
+        }
+
+        // The plates and points go last.
+        data.writeInt( m_plates.size() );
+        data.writeInt( m_points.size() );
+        for( int i = 0; i < m_points.size(); ++i ){
+            // Save the point's position
+            TecPoint point = getPoint( i );
+            Point3d  pos   = point.getPos();
+            data.writeDouble( pos.x );
+            data.writeDouble( pos.y );
+            data.writeDouble( pos.z );
+
+            // And creation date, size, and plateID
+            data.writeInt( point.getCreationDate() );
+            data.writeDouble( point.getSize() );
+            for( int k = 0; k < m_plates.size(); ++k ){
+                if( getPlate( k ).equals( point.getPlate() ) ){
+                    data.writeInt( k );
+                    break;
+                }
+            }
+
+            // And last its RockColumn
+            data.writeDouble( point.getMagmaDensity() );
+            data.writeDouble( point.getBaseDepthOffset() );
+            data.writeDouble( point.getRockThickness() );
+            data.writeDouble( point.getDensity() );
+        }
+        m_altered = false;
+        data.close();
+    }
+
+    /**
+     * Creates a new save file that doesn't exist on disc yet.
+     */
+    private void _openNewSaveFile(){
+        // Find somewhere suitable to put this world
+        try {
+            // If the worlds folder doesn't exist, make it.
+            File worldsFolder = new File( "TectonicPlanet/Worlds/" );
+            if( !worldsFolder.exists() ){
+                worldsFolder.mkdirs();
+            }
+
+            // Next find a world file name that doesn't already exist.
+            String worldsPath = worldsFolder.getAbsolutePath();
+            int i = 0;
+            do {
+                m_saveFile = new File( worldsPath + "World_" + (i++) + ".world" );
+            } while( m_saveFile.exists() );
+        }
+        catch( Exception e ){
+            System.out.println( "Error finding suitable file to save to - " + e );
+            e.printStackTrace( System.out );
+        }
     }
 }
