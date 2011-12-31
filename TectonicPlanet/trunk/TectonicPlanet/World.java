@@ -1055,34 +1055,54 @@ public class World {
         ){
         point.volCap  = 10e10;
         point.volCap2 = 10e10;
-        ArrayList linkedPoints = m_linkSystem.getPointLinks( point );
-        for( int i = 0; i < linkedPoints.size(); i++ ){
-            TecPoint p2 = (TecPoint)linkedPoints.get( i );
-            TecPoint tecpoint;
-            TecPoint tecpoint2;
-            if( point.getSurfaceHeight() > p2.getSurfaceHeight() ){
-                tecpoint2 = point;
-                tecpoint = p2;
+        ArrayList linkedPoints  = m_linkSystem.getPointLinks( point );
+        int linkedPointsCount   = linkedPoints.size();
+        TecPoint[] points       = new TecPoint[2];
+        double[]   pointHeights = new double[2];
+        Point3d[]  pointPoses   = new Point3d[2];
+        points[0]       = point;
+        pointHeights[0] = point.getSurfaceHeight();
+        pointPoses[0]   = point.getPos();
+        for( int i = 0; i < linkedPointsCount; ++i ){
+            points[1]       = (TecPoint)linkedPoints.get( i );
+            pointHeights[1] = points[1].getSurfaceHeight();
+            pointPoses[1]   = points[1].getPos();
+            int lowPntId;
+            int highPntId;
+            if( pointHeights[0] > pointHeights[1] ){
+                highPntId = 0;
+                lowPntId  = 1;
             }
             else {
-                tecpoint = point;
-                tecpoint2 = p2;
+                highPntId = 1;
+                lowPntId  = 0;
             }
-            double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
-            double dist = tecpoint.getPos().distance( tecpoint2.getPos() );
-            // Calculate limit for tecpoint
+            TecPoint lowPoint  = points[lowPntId];
+            TecPoint highPoint = points[highPntId];
+            double diff = pointHeights[highPntId] - pointHeights[lowPntId];
+            double dist = pointPoses[lowPntId].distance( pointPoses[highPntId] );
+
+            // Calculate limit for the lower point
+            // Limit due to not wanting tp to grow higher than the highPoint
             double gradLimit = gradientLimitOnLand;
-            if( tecpoint.heightAboveSeaLevel() < 0 )
+            if( pointHeights[lowPntId] < TecPoint.seaLevel ){
                 gradLimit = gradientLimitInSea;
-            tecpoint.volCap = Math.min( tecpoint.volCap, tecpoint.getArea() * (diff + gradLimit * dist) );
-            tecpoint.volCap = Math.min( tecpoint.volCap, tecpoint.getArea() * diff );    // Limit due to not wanting tp to grow higher than tp2
-            tecpoint.volCap2 = Math.min( tecpoint.volCap2, tecpoint.getArea() * (diff + gradLimit * dist) );
-            // Calculate limit for tecpoint2
+            }
+            double area = lowPoint.getArea();
+            double adjustedDist = diff + gradLimit * dist;
+            lowPoint.volCap  = Math.min( lowPoint.volCap,  area * adjustedDist );
+            lowPoint.volCap  = Math.min( lowPoint.volCap,  area * diff );
+            lowPoint.volCap2 = Math.min( lowPoint.volCap2, area * adjustedDist );
+
+            // Calculate limit for the higher point
             gradLimit = gradientLimitOnLand;
-            if( tecpoint2.heightAboveSeaLevel() < 0 )
+            if( pointHeights[highPntId] < TecPoint.seaLevel ){
                 gradLimit = gradientLimitInSea;
-            tecpoint2.volCap = Math.min( tecpoint2.volCap, tecpoint2.getArea() * (gradLimit * dist - diff) );
-            tecpoint2.volCap2 = Math.min( tecpoint2.volCap2, tecpoint2.getArea() * (gradLimit * dist - diff) );
+            }
+            area = highPoint.getArea();
+            adjustedDist = gradLimit * dist - diff;
+            highPoint.volCap  = Math.min( highPoint.volCap,  area * adjustedDist );
+            highPoint.volCap2 = Math.min( highPoint.volCap2, area * adjustedDist );
         }
     }
 
