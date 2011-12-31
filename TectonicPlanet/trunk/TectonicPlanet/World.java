@@ -1048,20 +1048,24 @@ public class World {
         System.out.println( "TimeStepped in " + timeStepDuration + "ms." );
     }
 
-    public void calcVolCap( TecPoint p, double gradientLimitOnLand, double gradientLimitInSea ){
-        p.volCap = 10e10;
-        p.volCap2 = 10e10;
-        ArrayList linkedPoints = m_linkSystem.getPointLinks( p );
+    public void calcVolCap(
+            TecPoint point,
+            double   gradientLimitOnLand,
+            double   gradientLimitInSea
+        ){
+        point.volCap  = 10e10;
+        point.volCap2 = 10e10;
+        ArrayList linkedPoints = m_linkSystem.getPointLinks( point );
         for( int i = 0; i < linkedPoints.size(); i++ ){
             TecPoint p2 = (TecPoint)linkedPoints.get( i );
             TecPoint tecpoint;
             TecPoint tecpoint2;
-            if( p.getSurfaceHeight() > p2.getSurfaceHeight() ){
-                tecpoint2 = p;
+            if( point.getSurfaceHeight() > p2.getSurfaceHeight() ){
+                tecpoint2 = point;
                 tecpoint = p2;
             }
             else {
-                tecpoint = p;
+                tecpoint = point;
                 tecpoint2 = p2;
             }
             double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
@@ -3255,9 +3259,11 @@ public class World {
     }
 
     private void _updateFEA(){
-        System.out.print( "Doing FEA..." );
-        double breakForce = 0.04;//40000.0/100.0;  // Tensile strength of links (*320 to compensate for link length)
+        // Tensile strength of links (*320 to compensate for link length)
+        double breakForce = 0.04;
+
         // Clear the old FEA data
+        System.out.print( "Doing FEA..." );
         ArrayList links = new ArrayList( m_linkSystem.getCollection() );
         for( int i = 0; i < links.size(); i++ ){
             LinkPair link = (LinkPair)links.get( i );
@@ -3294,14 +3300,10 @@ public class World {
                 TecPlate plate = getPlate( i );
                 double plateArea = plate.getArea();
                 double plateExp = (0.1 + 0.9 * Math.exp( -Math.pow( Math.min( 0, plateArea - 5000000 ) / 35000000, 2 ) ));
-                //System.out.println("Plate size exponent="+plateExp);
+
                 // Collect the links of this plate
                 ArrayList plateLinks = plVecs[i];
-                /*LinkPair lp;
-                for (int j=0; j<links.size(); j++) {
-                lp=(LinkPair)links.get(j);
-                if (lp.getA().getPlate()==plate && lp.getB().getPlate()==plate) plateLinks.add(lp);
-                }*/
+
                 // Recalculate the force distribution, breaking any overstressed links
                 boolean brokeMoreLinks = false, splitPlate = false;
                 double currentBreakForce = breakForce;
@@ -3353,129 +3355,15 @@ public class World {
                                 start = plate.getPoint( r );
                         }
                         if( start != null ){
-                            // OK, we're got a start point. Set up to spread out from this point
-                            ArrayList movedPoints = new ArrayList();
-                            ArrayList unmovedPoints = new ArrayList( platePoints );
-                            ArrayList brokenPoints = new ArrayList();
-                            // Move the start point
-                            movedPoints.add( start );
-                            unmovedPoints.remove( start );
-                            // Remove any broken points from the unmoved pile
-                            for( int r = 0; r < unmovedPoints.size(); r++ ){
-                                if( ((TecPoint)unmovedPoints.get( r )).broken ){
-                                    brokenPoints.add( unmovedPoints.get( r ) );
-                                    unmovedPoints.remove( r );
-                                    r--;
-                                }
-                            }
-                            // Loop around, moving connected unbroken points to the "moved" pile
-                            for( int r = 0; r < movedPoints.size() && unmovedPoints.size() > 0; r++ ){
-                                TecPoint p1 = (TecPoint)movedPoints.get( r );
-                                ArrayList linkedPoints = m_linkSystem.getPointLinks( p1 );
-                                for( int p = 0; p < linkedPoints.size(); p++ ){
-                                    TecPoint linkedPoint = (TecPoint)linkedPoints.get( p );
-                                    if( linkedPoint != p1 && !linkedPoint.broken && unmovedPoints.contains( linkedPoint ) ){
-                                        movedPoints.add( linkedPoint );
-                                        unmovedPoints.remove( linkedPoint );
-                                    }
-                                }
-                            }
-                            // Now see if there are any points left in the unmoved pile...
-                            if( unmovedPoints.size() > 0 ){
-                                // The plate was split into bits! Make a new plate...
-                                System.out.println( "FEA split a plate!" );
-                                TecPlate newPlate = new TecPlate( 0, 0, 0 );
-                                newPlates.add( newPlate );
-                                for( int j = 0; j < movedPoints.size(); j++ )
-                                    ((TecPoint)movedPoints.get( j )).setPlate( newPlate );
-                                newPlate.center();
-                                plate.center();
-                                // Just need to work out which side the broken points should go on.
-                                int oldBrokenPointsSize = -1;
-                                while( brokenPoints.size() > 0 ){
-                                    // Check if we removed any points last time round
-                                    if( brokenPoints.size() == oldBrokenPointsSize ){
-                                        // Uh-oh. WTF? Why didn't we remove any points?
-                                        System.out.println( "Uh-oh. WTF? Why didn't we remove any points?\nDoing it the slow way" );
-                                        // Make sure all the broken points are really borken
-                                        for( int j = 0; j < brokenPoints.size(); j++ )
-                                            ((TecPoint)brokenPoints.get( j )).broken = true;
-                                        // And assign them the slow way
-                                        // Get the linkedPoints for each brokenPoint, and count how many are in movedPoints and how many are in unmovedPoints
-                                        while( brokenPoints.size() > 0 ){
-                                            TecPoint bp = (TecPoint)brokenPoints.get( 0 );
-                                            ArrayList linkedPoints = m_linkSystem.getPointLinks( bp );
-                                            int countMoved = 0, countUnmoved = 0;
-                                            for( int k = 0; k < linkedPoints.size(); k++ ){
-                                                if( movedPoints.contains( linkedPoints.get( k ) ) )
-                                                    countMoved++;
-                                                else if( unmovedPoints.contains( linkedPoints.get( k ) ) )
-                                                    countUnmoved++;
-                                                else
-                                                    System.out.println( "!!!!!One of the brokenPoints wasn't in Moved _or_ Unmoved!!!!!" );
-                                            }
-                                            // Assign the brokenPoint to whichever it links to more.
-                                            if( countMoved > countUnmoved ){
-                                                // Assign to new plate
-                                                bp.setPlate( newPlate );
-                                                bp.broken = false;
-                                                brokenPoints.remove( 0 );
-                                            }
-                                            else {
-                                                // Assign to old plate
-                                                bp.setPlate( plate );
-                                                bp.broken = false;
-                                                brokenPoints.remove( 0 );
-                                            }
-                                            // Repeat until no more brokenPoints
-                                        }
-                                    }
-                                    oldBrokenPointsSize = brokenPoints.size();
-                                    // Find broken points which are _directly_ linked to the new plate, and remember them
-                                    ArrayList remember = new ArrayList();
-                                    for( int j = 0; j < plateLinks.size(); j++ ){
-                                        lp = (LinkPair)plateLinks.get( j );
-                                        if( lp.getA().broken && !lp.getB().broken && lp.getB().getPlate() == newPlate && !remember.contains( lp.getA() ) )
-                                            remember.add( lp.getA() );
-                                        else if( lp.getB().broken && !lp.getA().broken && lp.getA().getPlate() == newPlate && !remember.contains( lp.getB() ) )
-                                            remember.add( lp.getB() );
-                                    }
-                                    // Move all those points to the new plate (and remove them from the "broken" pile)
-                                    while( remember.size() > 0 ){
-                                        ((TecPoint)remember.get( 0 )).setPlate( newPlate );
-                                        ((TecPoint)remember.get( 0 )).broken = false;
-                                        brokenPoints.remove( remember.get( 0 ) );
-                                        remember.remove( 0 );
-                                    }
-
-                                    // Now do the same for the _old_ plate, then repeat until we've allocated all the broken points to one side or the other...
-                                    // Find broken points which are _directly_ linked to the old plate, and remember them
-                                    remember.clear();
-                                    for( int j = 0; j < plateLinks.size(); j++ ){
-                                        lp = (LinkPair)plateLinks.get( j );
-                                        if( lp.getA().broken && !lp.getB().broken && lp.getB().getPlate() == plate && !remember.contains( lp.getA() ) )
-                                            remember.add( lp.getA() );
-                                        else if( lp.getB().broken && !lp.getA().broken && lp.getA().getPlate() == plate && !remember.contains( lp.getB() ) )
-                                            remember.add( lp.getB() );
-                                    }
-                                    // Move all those points to the old plate (and remove them from the "broken" pile)
-                                    System.out.println( "Moving " + remember.size() + " of " + brokenPoints.size() + " points to the old plate" );
-                                    while( remember.size() > 0 ){
-                                        ((TecPoint)remember.get( 0 )).setPlate( plate );
-                                        ((TecPoint)remember.get( 0 )).broken = false;
-                                        brokenPoints.remove( remember.get( 0 ) );
-                                        remember.remove( 0 );
-                                    }
-
-                                }
-                                // Tidy up which links are plate-crossing
-                                for( int l = 0; l < links.size(); l++ ){
-                                    LinkPair link = (LinkPair)links.get( l );
-                                    link.plateCrosser = (link.getA().getPlate() != link.getB().getPlate());
-                                }
-                                System.out.println( "done splitting plate." );
-                                splitPlate = true;
-                            }
+                            boolean split = _fea_handleStartPoint(
+                                start,
+                                platePoints,
+                                newPlates,
+                                links,
+                                plate,
+                                plateLinks
+                            );
+                            splitPlate = split || splitPlate;
                         }
                         else {
                             System.out.println( "\nCouldn't find unbroken point to start from :(\n" );
@@ -3898,19 +3786,19 @@ public class World {
 
         // Make a list of all the points we are about to move (in a  HashSet so
         // we can do .contains(point) really fast)
-        ArrayList plateAPoints = plateA.getPoints();
-        int plateAPointCount   = plateAPoints.size();
-        ArrayList plateBPoints = plateB.getPoints();
-        int plateBPointCount   = plateBPoints.size();
+        TecPoint[] plateAPoints = (TecPoint[])plateA.getPoints().toArray( new TecPoint[1] );
+        int plateAPointCount    = plateAPoints.length;
+        TecPoint[] plateBPoints = (TecPoint[])plateB.getPoints().toArray( new TecPoint[1] );
+        int plateBPointCount    = plateBPoints.length;
         HashSet pointSet = new HashSet( plateAPointCount + plateBPointCount );
         for( int i = 0; i < plateAPointCount; ++i ){
-            TecPoint point = (TecPoint)plateAPoints.get( i );
+            TecPoint point = (TecPoint)plateAPoints[i];
             double dist = pointA.getPos().distanceSquared( point.getPos() );
             if( dist < squashSquare )
                 pointSet.add( point );
         }
         for( int i = 0; i < plateBPointCount; ++i ){
-            TecPoint point = (TecPoint)plateBPoints.get( i );
+            TecPoint point = (TecPoint)plateBPoints[i];
             double dist = positionB.distanceSquared( point.getPos() );
             if( dist < squashSquare )
                 pointSet.add( point );
@@ -3936,26 +3824,26 @@ public class World {
         }
 
         for( int i = 0; i < plateAPointCount; ++i ){
-            TecPoint tecpoint_159_ = (TecPoint)plateAPoints.get( i );
-            double dist = positionA.distanceSquared( tecpoint_159_.getPos() );
+            TecPoint point = (TecPoint)plateAPoints[i];
+            double dist = positionA.distanceSquared( point.getPos() );
             if( dist < squashSquare ){
                 move.scale( 1.0 - dist / squashSize, vector3d );
                 //tecpoint_159_.scale(1.0 + (0.05 * squash * (1.0 - (dist / squashSize))));
-                tecpoint_159_.move( move );
-                tecpoint_159_.setHeight( m_planetRadius );
-                tecpoint_159_.setValid( false );
+                point.move( move );
+                point.setHeight( m_planetRadius );
+                point.setValid( false );
             }
         }
         vector3d.scale( -1.0 );
         for( int i = 0; i < plateBPointCount; ++i ){
-            TecPoint tecpoint_162_ = ((TecPoint)plateBPoints.get( i ));
-            double dist = positionB.distanceSquared( tecpoint_162_.getPos() );
+            TecPoint point = ((TecPoint)plateBPoints[i]);
+            double dist = positionB.distanceSquared( point.getPos() );
             if( dist < squashSquare ){
                 move.scale( 1 - dist / squashSize, vector3d );
                 //tecpoint_162_.scale(1+0.05*squash*(1-dist/squashSize));
-                tecpoint_162_.move( move );
-                tecpoint_162_.setHeight( m_planetRadius );
-                tecpoint_162_.setValid( false );
+                point.move( move );
+                point.setHeight( m_planetRadius );
+                point.setValid( false );
             }
         }
 
@@ -3966,5 +3854,134 @@ public class World {
             tet.calcArea();
             tet.scaleHeights( tet.oldArea / tet.area );
         }
+    }
+
+    private boolean _fea_handleStartPoint( TecPoint start, ArrayList platePoints, ArrayList newPlates, ArrayList links, TecPlate plate, ArrayList plateLinks ){
+        // OK, we're got a start point. Set up to spread out from this point
+        ArrayList movedPoints   = new ArrayList();
+        ArrayList unmovedPoints = new ArrayList( platePoints );
+        ArrayList brokenPoints  = new ArrayList();
+
+        // Move the start point
+        movedPoints.add( start );
+        unmovedPoints.remove( start );
+
+        // Remove any broken points from the unmoved pile
+        for( int r = 0; r < unmovedPoints.size(); ++r ){
+            TecPoint point = (TecPoint)unmovedPoints.get( r );
+            if( point.broken ){
+                brokenPoints.add( point );
+                unmovedPoints.remove( r-- );
+            }
+        }
+        // Loop around, moving connected unbroken points to the "moved" pile
+        for( int r = 0; r < movedPoints.size() && unmovedPoints.size() > 0; r++ ){
+            TecPoint p1 = (TecPoint)movedPoints.get( r );
+            ArrayList linkedPoints = m_linkSystem.getPointLinks( p1 );
+            for( int p = 0; p < linkedPoints.size(); p++ ){
+                TecPoint linkedPoint = (TecPoint)linkedPoints.get( p );
+                if( linkedPoint != p1 && !linkedPoint.broken && unmovedPoints.contains( linkedPoint ) ){
+                    movedPoints.add( linkedPoint );
+                    unmovedPoints.remove( linkedPoint );
+                }
+            }
+        }
+        // Now see if there are any points left in the unmoved pile...
+        if( unmovedPoints.isEmpty() ){
+            return false;
+        }
+        // The plate was split into bits! Make a new plate...
+        System.out.println( "FEA split a plate!" );
+        TecPlate newPlate = new TecPlate( 0, 0, 0 );
+        newPlates.add( newPlate );
+        for( int j = 0; j < movedPoints.size(); j++ )
+            ((TecPoint)movedPoints.get( j )).setPlate( newPlate );
+        newPlate.center();
+        plate.center();
+        // Just need to work out which side the broken points should go on.
+        int oldBrokenPointsSize = -1;
+        while( brokenPoints.size() > 0 ){
+            // Check if we removed any points last time round
+            if( brokenPoints.size() == oldBrokenPointsSize ){
+                // Uh-oh. WTF? Why didn't we remove any points?
+                System.out.println( "Uh-oh. WTF? Why didn't we remove any points?\nDoing it the slow way" );
+                // Make sure all the broken points are really borken
+                for( int j = 0; j < brokenPoints.size(); j++ )
+                    ((TecPoint)brokenPoints.get( j )).broken = true;
+                // And assign them the slow way
+                // Get the linkedPoints for each brokenPoint, and count how many are in movedPoints and how many are in unmovedPoints
+                while( brokenPoints.size() > 0 ){
+                    TecPoint bp = (TecPoint)brokenPoints.get( 0 );
+                    ArrayList linkedPoints = m_linkSystem.getPointLinks( bp );
+                    int countMoved = 0, countUnmoved = 0;
+                    for( int k = 0; k < linkedPoints.size(); k++ ){
+                        if( movedPoints.contains( linkedPoints.get( k ) ) )
+                            countMoved++;
+                        else if( unmovedPoints.contains( linkedPoints.get( k ) ) )
+                            countUnmoved++;
+                        else
+                            System.out.println( "!!!!!One of the brokenPoints wasn't in Moved _or_ Unmoved!!!!!" );
+                    }
+                    // Assign the brokenPoint to whichever it links to more.
+                    if( countMoved > countUnmoved ){
+                        // Assign to new plate
+                        bp.setPlate( newPlate );
+                        bp.broken = false;
+                        brokenPoints.remove( 0 );
+                    }
+                    else {
+                        // Assign to old plate
+                        bp.setPlate( plate );
+                        bp.broken = false;
+                        brokenPoints.remove( 0 );
+                    }
+                    // Repeat until no more brokenPoints
+                }
+            }
+            oldBrokenPointsSize = brokenPoints.size();
+            // Find broken points which are _directly_ linked to the new plate, and remember them
+            ArrayList remember = new ArrayList();
+            for( int j = 0; j < plateLinks.size(); j++ ){
+                LinkPair lp = (LinkPair)plateLinks.get( j );
+                if( lp.getA().broken && !lp.getB().broken && lp.getB().getPlate() == newPlate && !remember.contains( lp.getA() ) )
+                    remember.add( lp.getA() );
+                else if( lp.getB().broken && !lp.getA().broken && lp.getA().getPlate() == newPlate && !remember.contains( lp.getB() ) )
+                    remember.add( lp.getB() );
+            }
+            // Move all those points to the new plate (and remove them from the "broken" pile)
+            while( remember.size() > 0 ){
+                ((TecPoint)remember.get( 0 )).setPlate( newPlate );
+                ((TecPoint)remember.get( 0 )).broken = false;
+                brokenPoints.remove( remember.get( 0 ) );
+                remember.remove( 0 );
+            }
+
+            // Now do the same for the _old_ plate, then repeat until we've allocated all the broken points to one side or the other...
+            // Find broken points which are _directly_ linked to the old plate, and remember them
+            remember.clear();
+            for( int j = 0; j < plateLinks.size(); j++ ){
+                LinkPair lp = (LinkPair)plateLinks.get( j );
+                if( lp.getA().broken && !lp.getB().broken && lp.getB().getPlate() == plate && !remember.contains( lp.getA() ) )
+                    remember.add( lp.getA() );
+                else if( lp.getB().broken && !lp.getA().broken && lp.getA().getPlate() == plate && !remember.contains( lp.getB() ) )
+                    remember.add( lp.getB() );
+            }
+            // Move all those points to the old plate (and remove them from the "broken" pile)
+            System.out.println( "Moving " + remember.size() + " of " + brokenPoints.size() + " points to the old plate" );
+            while( remember.size() > 0 ){
+                ((TecPoint)remember.get( 0 )).setPlate( plate );
+                ((TecPoint)remember.get( 0 )).broken = false;
+                brokenPoints.remove( remember.get( 0 ) );
+                remember.remove( 0 );
+            }
+
+        }
+        // Tidy up which links are plate-crossing
+        for( int l = 0; l < links.size(); l++ ){
+            LinkPair link = (LinkPair)links.get( l );
+            link.plateCrosser = (link.getA().getPlate() != link.getB().getPlate());
+        }
+        System.out.println( "done splitting plate." );
+        return true;
     }
 }
