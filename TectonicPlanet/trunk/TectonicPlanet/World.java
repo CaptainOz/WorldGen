@@ -420,6 +420,9 @@ public class World {
         }
     }
 
+    /**
+     * Saves the world to file.
+     */
     public void save(){
         System.out.print( "Saving..." );
         if( m_saveFile == null ){
@@ -447,23 +450,7 @@ public class World {
         }
         System.out.println( "done!" );
     }
-
-    // Do we know where to save the current planet?
-    public boolean hasName(){
-        return m_saveFile != null;
-    }
-
-    private void initGridBox(){
-        // Init the gridBox system
-        m_gridSize = (int)Math.ceil( -1 + m_planetRadius / (m_pointSpacing * 1.1) );
-        System.out.println( "Grid is " + m_gridSize + "^3" );
-        m_gridBox = new HashSet[m_gridSize][m_gridSize][m_gridSize];
-        for( int i = 0; i < m_gridSize; i++ )
-            for( int j = 0; j < m_gridSize; j++ )
-                for( int k = 0; k < m_gridSize; k++ )
-                    m_gridBox[i][j][k] = null;
-    }
-
+    
     /**
      * Returns <code>true</code> if this World has been altered since the last time it was saved
      */
