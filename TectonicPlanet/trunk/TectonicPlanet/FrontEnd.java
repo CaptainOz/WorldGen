@@ -73,7 +73,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
             paintGuard = true;
             System.out.print( "Waiting for painting.." );
             for( int k = 0; painting; ++k ){
-                if( k % 100 == 0 ){
+                if( k % 1000 == 0 ){
                     System.out.print( "." );
                 }
             }

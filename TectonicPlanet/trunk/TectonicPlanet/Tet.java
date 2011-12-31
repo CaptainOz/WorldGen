@@ -16,7 +16,12 @@ import java.util.*;
 
 
 
-
+/**
+ * Is this a tetrahedron?
+ *
+ * @author Tom Groves
+ * @author Nate Lillich
+ */
 public class Tet {
   public TecPoint a,b,c,d;
   public Point3d center=null;
