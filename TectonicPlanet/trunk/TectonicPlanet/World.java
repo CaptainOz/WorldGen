@@ -532,36 +532,47 @@ public class World {
         long time = System.currentTimeMillis();
 
         // Clear all the gridboxes
-        for( int i = 0; i < m_gridSize; i++ )
-            for( int j = 0; j < m_gridSize; j++ )
-                for( int k = 0; k < m_gridSize; k++ )
-                    if( m_gridBox[i][j][k] != null )
+        for( int i = 0; i < m_gridSize; ++i ){
+            for( int j = 0; j < m_gridSize; ++j ){
+                for( int k = 0; k < m_gridSize; ++k ){
+                    if( m_gridBox[i][j][k] != null ){
                         m_gridBox[i][j][k].clear();
+                    }
+                }
+            }
+        }
 
         // Put all the points in the gridBoxes
-        for( int i = 0; i < m_points.size(); i++ )
+        for( int i = 0; i < m_points.size(); i++ ){
             gridBoxAdd( (TecPoint)m_points.get( i ) );
+        }
 
-        // Make sure there's a point at the center of the planet. We use it for the tets
-        if( m_planetCenter == null )
+        // Make sure there's a point at the center of the planet. We use it for
+        // the tets
+        if( m_planetCenter == null ){
             m_planetCenter = new TecPoint( 0.0, 0.0, 0.0, m_epoch );
+        }
 
-        // If this isn't the first time we've delaunay'd the whole planet, find a suitable starting tet...
-        ArrayList activeTets = new ArrayList( 2000 );
+        // If this isn't the first time we've delaunay'd the whole planet, find
+        // a suitable starting tet...
+        ArrayList activeTets = null;
         if( m_tets != null ){
             activeTets = new ArrayList( m_tets.size() );
             boolean goodTet;
             Tet startTet;
+
             // Make random tets, then check if they're ok
             do {
                 goodTet = true;
                 startTet = (Tet)m_tets.get( (int)(Math.random() * (double)m_tets.size()) );
+
                 // Check if tet is ok
-                for( int i = 0; i < m_points.size() && goodTet; i++ ){
+                for( int i = 0; i < m_points.size() && goodTet; ++i ){
                     if( startTet.contains( getPoint( i ).getPos() ) )
                         goodTet = false;
                 }
             } while( !goodTet );
+
             // Found a good tet, start a new list based on it
             m_tets = new ArrayList();
             m_linkSystem = new LinkSystem();
@@ -574,6 +585,7 @@ public class World {
         else {
             // First time Delaunay
             // Reset the list of tets
+            activeTets = new ArrayList( 2000 );
             m_tets = new ArrayList();
             m_linkSystem = new LinkSystem();
 
@@ -600,7 +612,6 @@ public class World {
                 // Nope, we'll have to use brute force
                 System.out.println( "bad :(" );
                 System.out.println( "Using brute force to find first tet..." );
-                Object object = null;
                 do {
                     ok = true;
                     ArrayList nearby;
@@ -877,21 +888,6 @@ public class World {
         }
     }
 
-    private HashSet getGridBox( Point3d p ){
-        int x = getGridBoxX( p.x );
-        int y = getGridBoxY( p.y );
-        int z = getGridBoxZ( p.z );
-        return m_gridBox[x][y][z];
-    }
-
-    private void gridBoxRemove( TecPoint p ){
-        int x = getGridBoxX( p );
-        int y = getGridBoxY( p );
-        int z = getGridBoxZ( p );
-        if( m_gridBox[x][y][z] != null )
-            m_gridBox[x][y][z].remove( p );
-    }
-
     // The "pointsSurrounding" methods return a vector of points: those found in the gridbox containing the input point, and the gridboxes surrounding it
     private HashSet pointsSurrounding( Point3d point3d ){
         return pointsSurrounding( getGridBoxX( point3d.x ), getGridBoxX( point3d.y ), getGridBoxX( point3d.z ) );
@@ -925,27 +921,6 @@ public class World {
         return out;
     }
 
-    private HashSet pointsSurrounding( Point3d p1, Point3d p2, Point3d p3 ){
-        HashSet out = new HashSet( 100 );
-
-        int x1 = getGridBoxX( p1.x );
-        int y1 = getGridBoxY( p1.y );
-        int z1 = getGridBoxZ( p1.z );
-        int x2 = getGridBoxX( p2.x );
-        int y2 = getGridBoxY( p2.y );
-        int z2 = getGridBoxZ( p2.z );
-        int x3 = getGridBoxX( p3.x );
-        int y3 = getGridBoxY( p3.y );
-        int z3 = getGridBoxZ( p3.z );
-
-        for( int i = Math.min( x3, Math.min( x1, x2 ) ) - 1; i <= Math.max( x3, Math.max( x1, x2 ) ) + 1; i++ )
-            for( int j = Math.min( y3, Math.min( y1, y2 ) ) - 1; j <= Math.max( y3, Math.max( y1, y2 ) ) + 1; j++ )
-                for( int k = Math.min( z3, Math.min( z1, z2 ) ) - 1; k <= Math.max( z3, Math.max( z1, z2 ) ) + 1; k++ )
-                    if( i >= 0 && i < m_gridSize && j >= 0 && j < m_gridSize && k >= 0 && k < m_gridSize && m_gridBox[i][j][k] != null )
-                        out.addAll( m_gridBox[i][j][k] );
-        return out;
-    }
-
     private boolean checkIfValid( Tet tet ){
         // Work out which gridboxes overlap the circumcircle of this tet,
         // and check if any of the points in them are inside the circumcircle.
@@ -972,15 +947,6 @@ public class World {
                     }
         return true;  // Checked all possible invalidating points: this tet is fine.
     }
-
-    private int getGridBoxSize( int i, int i_117_, int i_118_ ){
-        if( m_gridBox[i][i_117_][i_118_] == null )
-            return 0;
-        return m_gridBox[i][i_117_][i_118_].size();
-    }
-    //private TecPoint getGridBoxPoint(int x, int y, int z, int p) {
-    //  return (TecPoint)gridBox[x][y][z].get(p);
-    //}
 
     public LinkSystem getLinkSystem(){
         return m_linkSystem;
@@ -1099,48 +1065,10 @@ public class World {
         if( foundBadness )
             calculateEdgeLinkPairs();
 
-        // Then check the strain on the plates
-  	/*System.out.println("Check platesplitting...");
-        double wiggle = 0.1;
-        for (int i = 0; i < plates.size(); i++) {
-        TecPlate tecplate = (TecPlate) plates.get(i);
-        tecplate.splitVector.x = tecplate.getPos().x;
-        tecplate.splitVector.y = tecplate.getPos().z;
-        tecplate.splitVector.z = -tecplate.getPos().y;
-        tecplate.splitVector.normalize();
-        if (tecplate.getPoints().size() > 10) {
-        double score = plateSplitScore(tecplate);
-        Vector3d backup = new Vector3d(tecplate.splitVector);
-        for (int j = 0; j < 30; j++) {
-        tecplate.splitVector.x	+= wiggle * (Math.random() - Math.random());
-        tecplate.splitVector.y	+= wiggle * (Math.random() - Math.random());
-        tecplate.splitVector.z	+= wiggle * (Math.random() - Math.random());
-        tecplate.splitVector.normalize();
-        double tempScore = plateSplitScore(tecplate);
-        if (tempScore <= score)	tecplate.splitVector.set(backup);
-        else score = tempScore;
-        }
-        if (score > 5.0E7) {
-        splitPlate(tecplate);
-        System.out.println("Split plate!!!!");
-        }
-        }
-        }*/
-
-        // Prototype k-nearest-means system
-        // Probably obsolete now I've invented the FEA system (17/2/2008)
-    /*for (int i=0; i<plates.size(); i++) {
-        TecPlate plate=(TecPlate)plates.get(i);
-        findMeans(plate);
-        }*/
-
-        //pointsCheck();
-
         // Move all the plates
         for( int i = 0; i < m_plates.size(); i++ ){
             TecPlate tecPlate = (TecPlate)m_plates.get( i );
             // Exert the force occuring at each point
-            Point3d point3d = new Point3d( 0.0, 0.0, 0.0 );
             for( int i_136_ = 0; i_136_ < tecPlate.getPoints().size(); i_136_++ ){
                 TecPoint tecPoint = tecPlate.getPoint( i_136_ );
                 calcMantleForceForTecPoint( tecPoint );
@@ -1172,8 +1100,7 @@ public class World {
             getPoint( i ).lms = -1;
 
         ArrayList landmassSections = new ArrayList();
-        TecPoint firstPoint, nextPoint, checkPoint;
-        boolean added = false;
+        TecPoint firstPoint, nextPoint;
         for( int p = 0; p < m_points.size(); p++ ){
             firstPoint = getPoint( p );
             if( firstPoint.lms == -1 && firstPoint.isContinental() ){
@@ -1527,7 +1454,7 @@ public class World {
                 if (lp.getA().getPlate()==plate && lp.getB().getPlate()==plate) plateLinks.add(lp);
                 }*/
                 // Recalculate the force distribution, breaking any overstressed links
-                boolean brokeMoreLinks = false, brokeAnyLinks = false, splitPlate = false;
+                boolean brokeMoreLinks = false, splitPlate = false;
                 double currentBreakForce = breakForce;
                 do {
                     brokeMoreLinks = false;
@@ -1536,8 +1463,6 @@ public class World {
                         lp.sortLink();
                     }
                     // Check for (and break) overstressed links
-                    double aveForce = 0;
-                    int lc = 0;
                     for( int r = 0; r < plateLinks.size(); r++ ){
                         lp = (LinkPair)plateLinks.get( r );
                         // Estimate the _width_ of the link. Use the sqrt of the average area of the 2 points
@@ -1547,7 +1472,6 @@ public class World {
                             lp.broken = true;
                             lp.removeFromFEA();
                             brokeMoreLinks = true;
-                            brokeAnyLinks = true;
 //System.out.println("Broke a link");
                         }
                         //aveForce=aveForce/(lc);
@@ -1668,7 +1592,6 @@ public class World {
                                             remember.add( lp.getB() );
                                     }
                                     // Move all those points to the new plate (and remove them from the "broken" pile)
-                                    System.out.println( "Moving " + remember.size() + " of " + brokenPoints.size() + " points to the new plate" );
                                     while( remember.size() > 0 ){
                                         ((TecPoint)remember.get( 0 )).setPlate( newPlate );
                                         ((TecPoint)remember.get( 0 )).broken = false;
@@ -1913,7 +1836,6 @@ public class World {
             }
             double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
             double dist = linkpair.getLength();
-            double gradient = diff / dist;
             // Calculate limit for tecpoint
             double gradLimit = gradientLimitOnLand;
             if( tecpoint.heightAboveSeaLevel() < 0 )
@@ -1956,17 +1878,6 @@ public class World {
                     double lh = p.getSurfaceHeight();
                     for( int j = 0; j < linkedPoints.size(); j++ ){
                         tempPoint = (TecPoint)linkedPoints.get( j );
-                        //System.out.println("  linkedPoint height="+tempPoint.getSurfaceHeight()+", volCap="+tempPoint.volCap);
-            /*if (tempPoint.getSurfaceHeight()<p.getSurfaceHeight() && tempPoint.volCap>0) {
-                        // Dump rock here, because we can
-                        /*double moveVol=Math.min(tempPoint.volCap,liftedVol);
-                        tempPoint.add(moveVol/tempPoint.getArea(),liftedDens);
-                        liftedVol-=moveVol;
-                        // Redo the volCap of the lowest point, and all the points linked from it
-                        calcVolCap(tempPoint, gradientLimitOnLand,gradientLimitInSea);
-                        Vector linkedPoints2=linkSystem.getPointLinks(tempPoint);
-                        for (int k=0; k<linkedPoints2.size(); k++) {calcVolCap((TecPoint)linkedPoints2.get(k), gradientLimitOnLand,gradientLimitInSea);}
-                        }*/
                         if( tempPoint.getSurfaceHeight() < lh ){
                             lowest = tempPoint;
                             lh = lowest.getSurfaceHeight();
@@ -1999,23 +1910,15 @@ public class World {
                             calcVolCap( (TecPoint)linkedPoints2.get( k ), gradientLimitOnLand, gradientLimitInSea );
                         }
                         //System.out.println("Dropped "+moveVol+"km^3 in a hole\n"+liftedVol+"km^3 remaining");
-                    }/*else {
-                    // Dammit, we have to scrape rock off here, too!
-                    lowest.remove(lowest.volCap/lowest.getArea());
-                    liftedDens=(liftedVol*liftedDens+lowest.volCap*lowest.getDensity())/(liftedVol+lowest.volCap);
-                    liftedVol+=lowest.volCap;
-                    // Redo the volCap of the lowest point, and all the points linked from it
-                    calcVolCap(lowest, gradientLimitOnLand,gradientLimitInSea);
-                    Vector linkedPoints2=linkSystem.getPointLinks(lowest);
-                    for (int k=0; k<linkedPoints2.size(); k++) {calcVolCap((TecPoint)linkedPoints2.get(k), gradientLimitOnLand,gradientLimitInSea);}
-                    }*/
+                    }
                     // Move pointer to lowest point, and repeat
                     p = lowest;
                     linkedPoints = m_linkSystem.getPointLinks( p );
                     count++;
                 }
                 if( count >= 1000 ){
-                    System.out.println( "*****\nBAD EROSION! Lost " + liftedVol + "km^3 of rock.\n*****" );
+                    // TODO: Why is this important enough to warant a giant log
+                    //       message?
                     // Problem. Dump this rock over the whole planet :)
                     for( int j = 0; j < m_points.size(); j++ ){
                         getPoint( j ).add( liftedVol / m_planetSurfaceArea, liftedDens );
@@ -2024,72 +1927,6 @@ public class World {
             }
         }
         System.out.println( "done" );
-
-        // Very crude smoothing
-  	/*System.out.print("Smoothing..");
-        double seaLevel = TecPoint.seaLevel;
-        double gradientLimitOnLand=1.0/40.0;  // 2.5% gradient on land
-        double gradientLimitInSea=1.0/16.0;  // 6% gradient in the sea
-        double moveLimit=50;    // Can't add or remove more than this (vertical km of rock) in one turn
-        int smoothed=0;
-        do {
-        System.out.print(".");
-        smoothed=0;
-        Iterator iterator_193_ = linkSystem.getIterator();
-        while (iterator_193_.hasNext()) {
-        LinkPair linkpair;
-        do {
-        linkpair = (LinkPair) iterator_193_.next();
-        } while (iterator_193_.hasNext()  && (Math.random() < 0.6 || linkpair.getCount() < 2));
-        TecPoint tecpoint;
-        TecPoint tecpoint2;
-        if (linkpair.getA().getSurfaceHeight() > linkpair.getB().getSurfaceHeight()) {
-        tecpoint2 = linkpair.getA();
-        tecpoint = linkpair.getB();
-        } else {
-        tecpoint = linkpair.getA();
-        tecpoint2 = linkpair.getB();
-        }
-        // Move rock from p1 to p2
-        double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
-        double dist= linkpair.getLength();
-        double gradient=diff/dist;
-        if (tecpoint2.heightAboveSeaLevel()>0 && gradient>=gradientLimitOnLand) {
-        // It's above the gradient limit (on land)
-        double depthToRemove=-(gradientLimitOnLand*dist+tecpoint.getSurfaceHeight()-tecpoint2.getSurfaceHeight())/(1+tecpoint2.getArea()/tecpoint.getArea());
-        if (depthToRemove<0.001) depthToRemove=0.001;
-        double depthToAdd=depthToRemove*tecpoint2.getArea()/tecpoint.getArea();
-        if (depthToRemove<0 || depthToAdd<0) {System.out.println("depthToRemove="+depthToRemove+",  depthToAdd="+depthToAdd+", highArea="+tecpoint2.getArea()+", lowArea="+tecpoint.getArea());}
-        else if (depthToRemove<moveLimit && depthToAdd<moveLimit) {
-        tecpoint2.remove(depthToRemove);
-        tecpoint.add(depthToAdd, tecpoint2.getDensity()*0.95 + 2.7*0.05);
-        smoothed++;
-        }
-        } else if (tecpoint2.heightAboveSeaLevel()<=0 && gradient>=gradientLimitInSea) {
-        // It's above the gradient limit (in sea)
-        double depthToRemove=-(gradientLimitInSea*dist+tecpoint.getSurfaceHeight()-tecpoint2.getSurfaceHeight())/(1+tecpoint2.getArea()/tecpoint.getArea());
-        if (depthToRemove<0.001) depthToRemove=0.001;
-        double depthToAdd=depthToRemove*tecpoint2.getArea()/tecpoint.getArea();
-        if (depthToRemove<0 || depthToAdd<0) {System.out.println("depthToRemove="+depthToRemove+",  depthToAdd="+depthToAdd+", highArea="+tecpoint2.getArea()+", lowArea="+tecpoint.getArea());}
-        else if (depthToRemove<moveLimit && depthToAdd<moveLimit) {
-        tecpoint2.remove(depthToRemove);
-        tecpoint.add(depthToAdd, tecpoint2.getDensity()*0.95 + 2.7*0.05);
-        smoothed++;
-        }
-        }
-        }
-        } while (smoothed>linkSystem.size()*0.6*0.0001);*/
-
-        // Maybe do coral reef growth?
-        // Bring anything within 30d of the equator and 50m of the ocean surface to the surface.
-  	/*System.out.print("Growing coral reefs...");
-        for (int i=0; i<points.size(); i++) {
-        TecPoint p=getPoint(i);
-        if (Math.abs(p.getLat())<Math.toRadians(30) && p.heightAboveSeaLevel()<0 && p.heightAboveSeaLevel()>-0.050) {
-        p.add(-p.heightAboveSeaLevel()*Math.random(), 2); // Assume limestone density 2
-        }
-        }
-        System.out.println("done");*/
 
         System.out.print( "Smoothing..." );
         double iceAgeSeaLevel = -0.140 * Math.random(); // Ice ages will reduce sea levels by up to 140m
@@ -2208,7 +2045,6 @@ public class World {
             }
             double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
             double dist = tecpoint.getPos().distance( tecpoint2.getPos() );
-            double gradient = diff / dist;
             // Calculate limit for tecpoint
             double gradLimit = gradientLimitOnLand;
             if( tecpoint.heightAboveSeaLevel() < 0 )
@@ -2251,43 +2087,11 @@ public class World {
         // Expand the zone of invalidation
         System.out.println( "Expanding zone of invalidation..." );
         ArrayList invalidTets = new ArrayList( m_tets.size() );
-        /*for (int i = 0; i <= 1; i++) {
-        for (int i_198_ = 0; i_198_ < tets.size(); i_198_++) {
-        Tet tet = (Tet) tets.get(i_198_);
-        if (!tet.b.isValid() || !tet.c.isValid() || !tet.d.isValid())
-        invalidTets.add(tet);
-        }
-        for (int i_199_ = 0; i_199_ < invalidTets.size(); i_199_++) {
-        Tet tet = (Tet) invalidTets.get(i_199_);
-        tet.b.setValid(false);
-        tet.c.setValid(false);
-        tet.d.setValid(false);
-        }
-        invalidTets.removeAllElements();
-        }*/
 
         // Check the existing possibly invalid tets for actual validity
         System.out.print( "Checking validity..." );
         long validityTime = System.currentTimeMillis();
-        /*  // Old validity checking method
-        for (int i = 0; i < tets.size(); i++) {
-        Tet tet = (Tet) tets.get(i);
-        if (!tet.b.isValid() || !tet.c.isValid() || !tet.d.isValid()) {
-        HashSet nearby = pointsSurrounding(tet.b.getPos(), tet.c.getPos(), tet.d.getPos());
-        // Now check against all nearby points
-        boolean ok = true;
-        int check = 0;
-        tet.calc();
-        Iterator iter=nearby.iterator();
-        while (ok && iter.hasNext()) {
-        //for (; ok && check < nearby.size(); check++) {
-        TecPoint checkpoint = (TecPoint) iter.next();//nearby.get(check);
-        if (!tet.uses(checkpoint) && tet.contains(checkpoint.getPos()))
-        ok = false;
-        }
-        if (!ok)  invalidTets.add(tet);
-        }
-        }*/
+
         // New validity checking method
         for( int i = 0; i < m_tets.size(); i++ ){
             Tet tet = (Tet)m_tets.get( i );
@@ -2548,9 +2352,7 @@ public class World {
                                 tempTet.calc();
                                 // Now check against all nearby points
                                 boolean ok = true;
-                                int check = 0;
-                                TecPoint checkPoint = null, closestPoint = null;
-                                closestDist = Double.MAX_VALUE;
+                                TecPoint checkPoint = null;
                                 iter2 = nearby.iterator();
                                 while( ok && iter2.hasNext() ){
                                     //for (/**/; ok && check < nearby.size(); check++) {
@@ -2560,7 +2362,6 @@ public class World {
                                             && checkPoint != tet.c
                                             && distRatio < closestDist ){
                                         // This checkPoint is the closest so far, record it
-                                        TecPoint tecpoint_233_ = checkPoint;
                                         closestDist = distRatio;
                                     }
                                 }
@@ -2603,7 +2404,6 @@ public class World {
                                 tempTet.calc();
                                 // Now check against all nearby points
                                 boolean ok = true;
-                                int check = 0;
                                 closestDist = Double.MAX_VALUE;
                                 iter2 = nearby.iterator();
                                 while( ok && iter2.hasNext() ){
@@ -2612,7 +2412,6 @@ public class World {
                                     double d_244_ = ((tempTet.center.distance( checkPoint.getPos() )) / Math.sqrt( tempTet.radiussq ));
                                     if( checkPoint != pk && checkPoint != tet.c && checkPoint != tet.d && d_244_ < closestDist ){
                                         // This checkPoint is the closest so far, record it
-                                        TecPoint closestPoint = checkPoint;
                                         closestDist = d_244_;
                                     }
                                 }
@@ -2637,7 +2436,6 @@ public class World {
                     if( m_linkSystem.getCount( tet.b, tet.d ) <= 1 ){
                         System.out.println( "We should have expanded from b-d, so why didn't we?" );
                         HashSet nearby = pointsSurrounding( tet.b.getPos(), tet.d.getPos() );
-                        int i = 0;
                         TecPoint bestPoint = null;
                         double bestDist = 0.0;
                         double closestDist = Double.MAX_VALUE;
@@ -2653,9 +2451,6 @@ public class World {
                                 temp.calc();
                                 // Now check against all nearby points
                                 boolean ok = true;
-                                int check = 0;
-                                Object object_253_ = null;
-                                Object object_254_ = null;
                                 closestDist = Double.MAX_VALUE;
                                 iter2 = nearby.iterator();
                                 while( ok && iter2.hasNext() ){
@@ -2666,7 +2461,6 @@ public class World {
                                             && checkPoint != tet.d
                                             && d_256_ < closestDist ){
                                         // This checkPoint is the closest so far, record it
-                                        TecPoint tecpoint_257_ = checkPoint;
                                         closestDist = d_256_;
                                     }
                                 }
@@ -2917,34 +2711,6 @@ public class World {
                 pos.x = Math.sin( lon ) * Math.cos( lat ) * m_planetRadius;
                 pos.y = Math.sin( lat ) * m_planetRadius;
                 pos.z = Math.cos( lon ) * Math.cos( lat ) * m_planetRadius;
-
-                /*dist1=planetRadius*planetRadius;
-                dist2=planetRadius*planetRadius;
-                dist3=planetRadius*planetRadius;
-                closest1=closest2=null;
-                gridBox=pointsSurrounding(getGridBoxX(pos.x),getGridBoxY(pos.y),getGridBoxZ(pos.z));
-                if (gridBox!=null) {
-                for (int i=0; i<gridBox.size(); i++) {
-                temp=((TecPoint)gridBox.get(i)).getPos().distanceSquared(pos);
-                if (temp<dist1) {
-                dist3=dist2;
-                closest3=closest2;
-                dist2=dist1;
-                closest2=closest1;
-                closest1=(TecPoint)gridBox.get(i);
-                dist1=temp;
-                } else if (temp<dist2) {
-                dist3=dist2;
-                closest3=closest2;
-                closest2=(TecPoint)gridBox.get(i);
-                dist2=temp;
-                } else if (temp<dist3) {
-                closest3=(TecPoint)gridBox.get(i);
-                dist3=temp;
-                }
-                }
-                dist1=Math.sqrt(dist1);
-                dist2=Math.sqrt(dist2);*/
 
                 tet = getTet( pos );
                 if( tet != null ){
@@ -3300,10 +3066,6 @@ public class World {
         m_imageBuffer = new BufferedImage( size, size, 1 );
         int[][] is = new int[size][size];
         Point3d point3d = new Point3d();
-        double therm = 0.0;
-        Object object = null;
-        Object object_324_ = null;
-        Object object_325_ = null;
         Tet tet = null;
         for( int lev = levels - 1; lev < levels; lev++ ){
             for( int row = 0; ( (double)row < (double)num * Math.pow( 2.0, (double)lev ) / 2.0 ); row++ ){
@@ -3311,10 +3073,10 @@ public class World {
                     System.out.println( "Generating tile(" + row + "," + col + ") of level " + lev );
                     ArrayList vector = new ArrayList();
                     for( int x = 0; x < size; x++ ){
-                        double lon = (6.283185307179586 * ((double)col + (double)x / (double)size) / ((double)num * Math.pow( 2.0, (double)lev )));
-                        lon = (lon + 3.141592653589793) % 6.283185307179586;
+                        double lon = (2 * Math.PI * ((double)col + (double)x / (double)size) / ((double)num * Math.pow( 2.0, (double)lev )));
+                        lon = (lon + Math.PI) % (2 * Math.PI);
                         for( int y = 0; y < size; y++ ){
-                            double lat = (-1.5707963267948966 + (3.141592653589793 * ((double)row + (double)y / (double)size) / ((double)num * Math.pow( 2.0, (double)lev ) / 2.0)));
+                            double lat = (Math.PI/-2.0 + (Math.PI * ((double)row + (double)y / (double)size) / ((double)num * Math.pow( 2.0, (double)lev ) / 2.0)));
                             point3d.x = (Math.sin( lon ) * Math.cos( lat ) * m_planetRadius);
                             point3d.y = Math.sin( lat ) * m_planetRadius;
                             point3d.z = (Math.cos( lon ) * Math.cos( lat ) * m_planetRadius);
@@ -3346,25 +3108,6 @@ public class World {
                         File file = new File( "TectonicPlanet/Quads/visible/" + lev + "/" + numberCode( row ) + "/" + numberCode( row ) + "_" + numberCode( col ) + ".jpg" );
                         file.getParentFile().mkdirs();
                         ImageIO.write( m_imageBuffer, "jpg", file );
-                        /*for (int i_349_ = 0; i_349_ < 10; i_349_++) {
-                        File file_350_
-                        = new File(new StringBuilder().append
-                        ("TectonicPlanet/Quads/thermal")
-                        .append
-                        (i_349_).append
-                        ("/").append
-                        (lev).append
-                        ("/").append
-                        (numberCode(row)).append
-                        ("/").append
-                        (numberCode(row)).append
-                        ("_").append
-                        (numberCode(col)).append
-                        (".jpg").toString());
-                        file_350_.getParentFile().mkdirs();
-                        ImageIO.write(bufferedimages[i_349_], "jpg",
-                        file_350_);
-                        }*/
                     }
                     catch( IOException ioexception ){
                         System.out.println( "I/O exception! - " + ioexception.toString() );
@@ -3377,566 +3120,6 @@ public class World {
         // MIP map the rest of the levels
         System.out.println( "MIPmapping the rest of the levels..." );
         recurseTiles( num, levels, size, "TectonicPlanet/Quads/visible/" );
-        /*for (int lev = levels - 2; lev >= 0; lev--) {
-        System.out.println(new StringBuilder().append
-        ("Generating level ").append
-        (lev).toString());
-        for (int i_354_ = 0;
-        ((double) i_354_
-        < (double) num * Math.pow(2.0, (double) lev) / 2.0);
-        i_354_++) {
-        for (int i_355_ = 0;
-        ((double) i_355_
-        < (double) num * Math.pow(2.0, (double) lev));
-        i_355_++) {
-        System.out.println(new StringBuilder().append
-        ("Generating tile(").append
-        (i_354_).append
-        (",").append
-        (i_355_).append
-        (") of level ").append
-        (lev).toString());
-        int i_356_ = i_354_ * 2;
-        int i_357_ = i_355_ * 2;
-        combineImages(image,
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/visible/")
-        .append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("_").append
-        (numberCode(i_357_)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/visible/")
-        .append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("_").append
-        (numberCode(i_357_ + 1)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/visible/")
-        .append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("_").append
-        (numberCode(i_357_)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/visible/")
-        .append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("_").append
-        (numberCode(i_357_ + 1)).append
-        (".jpg").toString()));
-        for (int i_358_ = 0; i_358_ < 10; i_358_++)
-        combineImages
-        (bufferedimages[i_358_],
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/thermal").append
-        (i_358_).append
-        ("/").append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("_").append
-        (numberCode(i_357_)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/thermal").append
-        (i_358_).append
-        ("/").append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("_").append
-        (numberCode(i_357_ + 1)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/thermal").append
-        (i_358_).append
-        ("/").append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("_").append
-        (numberCode(i_357_)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/thermal").append
-        (i_358_).append
-        ("/").append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("_").append
-        (numberCode(i_357_ + 1)).append
-        (".jpg").toString()));
-        combineImages(bufferedimage,
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/biome/").append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("_").append
-        (numberCode(i_357_)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/biome/").append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("/").append
-        (numberCode(i_356_)).append
-        ("_").append
-        (numberCode(i_357_ + 1)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/biome/").append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("_").append
-        (numberCode(i_357_)).append
-        (".jpg").toString()),
-        new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/biome/").append
-        (lev + 1).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("/").append
-        (numberCode(i_356_ + 1)).append
-        ("_").append
-        (numberCode(i_357_ + 1)).append
-        (".jpg").toString()));
-        try {
-        File file
-        = new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/visible/").append
-        (lev).append
-        ("/").append
-        (numberCode(i_354_)).append
-        ("/").append
-        (numberCode(i_354_)).append
-        ("_").append
-        (numberCode(i_355_)).append
-        (".jpg").toString());
-        file.getParentFile().mkdirs();
-        ImageIO.write(image, "jpg", file);
-        for (int i_359_ = 0; i_359_ < 10; i_359_++) {
-        File file_360_
-        = new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/thermal")
-        .append
-        (i_359_).append
-        ("/").append
-        (lev).append
-        ("/").append
-        (numberCode(i_354_)).append
-        ("/").append
-        (numberCode(i_354_)).append
-        ("_").append
-        (numberCode(i_355_)).append
-        (".jpg").toString());
-        file_360_.getParentFile().mkdirs();
-        ImageIO.write(bufferedimages[i_359_], "jpg",
-        file_360_);
-        }
-        file = new File(new StringBuilder().append
-        ("TectonicPlanet/Quads/biome/").append
-        (lev).append
-        ("/").append
-        (numberCode(i_354_)).append
-        ("/").append
-        (numberCode(i_354_)).append
-        ("_").append
-        (numberCode(i_355_)).append
-        (".jpg").toString());
-        file.getParentFile().mkdirs();
-        ImageIO.write(bufferedimage, "jpg", file);
-        } catch (IOException ioexception) {
-        System.out.println(new StringBuilder().append
-        ("I/O exception! - ").append
-        (ioexception).toString());
-        ioexception.printStackTrace();
-        }
-        }
-        }
-        }
-        int i_361_ = 1024;
-        int i_362_ = i_361_ / 2;
-        image = new BufferedImage(i_361_, i_362_, 2);
-        Graphics2D graphics2d = (Graphics2D) image.getGraphics();
-        Composite composite = graphics2d.getComposite();
-        graphics2d.setComposite(AlphaComposite.getInstance(1, 0.0F));
-        Rectangle2D.Double var_double
-        = new Rectangle2D.Double(0.0, 0.0, (double) i_361_,
-        (double) i_362_);
-        graphics2d.fill(var_double);
-        graphics2d.setComposite(composite);
-        graphics2d.setColor(Color.red);
-        for (int i_363_ = 0; i_363_ < points.size(); i_363_ += 16) {
-        TecPoint tecpoint = getPoint(i_363_);
-        if (tecpoint.heightAboveSeaLevel() < 0.0) {
-        double d_364_ = tecpoint.getLat();
-        double d_365_ = tecpoint.getLon();
-        if (d_365_ < 0.0)
-        d_365_ += 6.283185307179586;
-        int i_366_
-        = (int) (d_365_ * (double) i_361_ / 6.283185307179586);
-        int i_367_
-        = (int) ((d_364_ + 1.5707963267948966)
-         * (double) (i_362_ - 1) / 3.141592653589793);
-        TecPoint tecpoint_368_
-        = new TecPoint(tecpoint.getX() + tecpoint.flow.x * 50.0,
-        tecpoint.getY() + tecpoint.flow.y * 50.0,
-        tecpoint.getZ() + tecpoint.flow.z * 50.0,
-        0);
-        double d_369_ = tecpoint_368_.getLat();
-        double d_370_ = tecpoint_368_.getLon();
-        if (d_370_ < 0.0)
-        d_370_ += 6.283185307179586;
-        int i_371_
-        = (int) (d_370_ * (double) i_361_ / 6.283185307179586);
-        int i_372_
-        = (int) ((d_369_ + 1.5707963267948966)
-         * (double) (i_362_ - 1) / 3.141592653589793);
-        double d_373_
-        = Math.sqrt((double) ((i_366_ - i_371_) * (i_366_ - i_371_)
-        + (i_367_ - i_372_) * (i_367_
-        - i_372_)));
-        if (d_373_ < 100.0) {
-        try {
-        graphics2d.drawLine((i_366_ + i_361_ / 2) % i_361_,
-        i_362_ - i_367_ - 1,
-        (i_371_ + i_361_ / 2) % i_361_,
-        i_362_ - i_372_ - 1);
-        graphics2d.fillOval((i_366_ - 1 + i_361_ / 2) % i_361_,
-        i_362_ - i_367_ - 2, 3, 3);
-        } catch (Exception exception) {
-        System.out.println
-        (new StringBuilder().append
-        ("Couldn't draw the flowline at ").append
-        (i_366_).append
-        (",").append
-        (i_367_).toString());
-        System.out.println(exception);
-        }
-        }
-        }
-        }
-        try {
-        File file = new File("TectonicPlanet/OceanCurrentOverlay.png");
-        file.getParentFile().mkdirs();
-        ImageIO.write(image, "png", file);
-        } catch (Exception exception) {
-        System.out.println("Error saving OceanCurrentOverlay.png");
-        System.out.println(exception);
-        }
-        for (int i_374_ = 0; i_374_ < 10; i_374_++) {
-        graphics2d.setComposite(AlphaComposite.getInstance(1, 0.0F));
-        graphics2d.fill(var_double);
-        graphics2d.setComposite(composite);
-        graphics2d.setColor(Color.yellow);
-        for (int i_375_ = 0; i_375_ < points.size(); i_375_ += 4) {
-        TecPoint tecpoint = getPoint(i_375_);
-        Vector3d vector3d
-        = predictedWindVector(tecpoint.getPos(), i_374_);
-        double d_376_ = tecpoint.getLat();
-        double d_377_ = tecpoint.getLon();
-        if (d_377_ < 0.0)
-        d_377_ += 6.283185307179586;
-        int i_378_
-        = (int) (d_377_ * (double) i_361_ / 6.283185307179586);
-        int i_379_
-        = (int) ((d_376_ + 1.5707963267948966)
-         * (double) (i_362_ - 1) / 3.141592653589793);
-        TecPoint tecpoint_380_
-        = new TecPoint(tecpoint.getX() + vector3d.x * 30.0,
-        tecpoint.getY() + vector3d.y * 30.0,
-        tecpoint.getZ() + vector3d.z * 30.0, 0);
-        double d_381_ = tecpoint_380_.getLat();
-        double d_382_ = tecpoint_380_.getLon();
-        if (d_382_ < 0.0)
-        d_382_ += 6.283185307179586;
-        int i_383_
-        = (int) (d_382_ * (double) i_361_ / 6.283185307179586);
-        int i_384_
-        = (int) ((d_381_ + 1.5707963267948966)
-         * (double) (i_362_ - 1) / 3.141592653589793);
-        double d_385_
-        = Math.sqrt((double) ((i_378_ - i_383_) * (i_378_ - i_383_)
-        + (i_379_ - i_384_) * (i_379_
-        - i_384_)));
-        if (d_385_ < 100.0) {
-        try {
-        graphics2d.drawLine((i_378_ + i_361_ / 2) % i_361_,
-        i_362_ - i_379_ - 1,
-        (i_383_ + i_361_ / 2) % i_361_,
-        i_362_ - i_384_ - 1);
-        graphics2d.fillOval((i_378_ - 1 + i_361_ / 2) % i_361_,
-        i_362_ - i_379_ - 2, 3, 3);
-        } catch (Exception exception) {
-        System.out.println
-        (new StringBuilder().append
-        ("Couldn't draw the flowline at ").append
-        (i_378_).append
-        (",").append
-        (i_379_).toString());
-        System.out.println(exception);
-        }
-        }
-        }
-        try {
-        File file = new File(new StringBuilder().append
-        ("TectonicPlanet/WindOverlay").append
-        (i_374_).append
-        (".png").toString());
-        file.getParentFile().mkdirs();
-        ImageIO.write(image, "png", file);
-        } catch (Exception exception) {
-        System.out.println(new StringBuilder().append
-        ("Error saving WindOverlay").append
-        (i_374_).append
-        (".png").toString());
-        System.out.println(exception);
-        }
-        }
-        graphics2d.setComposite(AlphaComposite.getInstance(1, 0.0F));
-        graphics2d.fill(var_double);
-        graphics2d.setComposite(composite);
-        for (int i_386_ = 0; i_386_ < points.size(); i_386_++) {
-        TecPoint tecpoint = getPoint(i_386_);
-        if (tecpoint.getCreationDate() > 0) {
-        double d_387_ = tecpoint.getLat();
-        double d_388_ = tecpoint.getLon();
-        if (d_388_ < 0.0)
-        d_388_ += 6.283185307179586;
-        int i_389_
-        = (int) (d_388_ * (double) i_361_ / 6.283185307179586);
-        int i_390_
-        = (int) ((d_387_ + 1.5707963267948966)
-         * (double) (i_362_ - 1) / 3.141592653589793);
-        int i_391_ = tecpoint.getCreationDate() % 256;
-        int i_392_ = (int) ((double) tecpoint.getCreationDate() * 0.5
-        % 256.0);
-        int i_393_ = (int) ((double) tecpoint.getCreationDate() * 0.1
-        % 256.0);
-        graphics2d.setColor(new Color(i_391_, i_392_, i_393_));
-        graphics2d.fillOval((i_389_ - 1 + i_361_ / 2) % i_361_,
-        i_362_ - i_390_ - 2, 3, 3);
-        }
-        }
-        System.out.println("Starting on ageOverlay...");
-        for (int i_394_ = 0; i_394_ < i_361_; i_394_++) {
-        double d_395_
-        = 6.283185307179586 * (double) i_394_ / (double) i_361_;
-        for (int i_396_ = 0; i_396_ < i_362_; i_396_++) {
-        double d_397_ = (-1.5707963267948966
-        + (3.141592653589793 * (double) i_396_
-        / (double) i_362_));
-        point3d.x = Math.sin(d_395_) * Math.cos(d_397_) * planetRadius;
-        point3d.y = Math.sin(d_397_) * planetRadius;
-        point3d.z = Math.cos(d_395_) * Math.cos(d_397_) * planetRadius;
-        if (tet == null || !tet.strictlyContains(point3d))
-        tet = getTet(point3d);
-        if (tet != null) {
-        TecPoint tecpoint = tet.b;
-        TecPoint tecpoint_398_ = tet.c;
-        TecPoint tecpoint_399_ = tet.d;
-        double d_400_ = point3d.distance(tecpoint.getPos());
-        double d_401_ = point3d.distance(tecpoint_398_.getPos());
-        double d_402_ = point3d.distance(tecpoint_399_.getPos());
-        double d_403_
-        = triangleArea(d_401_, d_402_,
-        tecpoint_398_.getPos()
-        .distance(tecpoint_399_.getPos()));
-        double d_404_
-        = triangleArea(d_400_, d_402_,
-        tecpoint.getPos()
-        .distance(tecpoint_399_.getPos()));
-        double d_405_
-        = triangleArea(d_400_, d_401_,
-        tecpoint.getPos()
-        .distance(tecpoint_398_.getPos()));
-        double d_406_ = 1.0 / (d_403_ + d_404_ + d_405_);
-        double d_407_ = d_403_ * d_406_;
-        double d_408_ = d_404_ * d_406_;
-        double d_409_ = d_405_ * d_406_;
-        double d_410_
-        = (double) ((int) ((((double) tecpoint
-        .getCreationDate()
-         * d_407_)
-        + ((double) tecpoint_398_
-        .getCreationDate()
-         * d_408_)
-        + ((double) tecpoint_399_
-        .getCreationDate()
-         * d_409_))
-         * 0.5)
-        % 256);
-        image.setRGB((i_394_ + i_361_ / 2) % i_361_,
-        i_362_ - i_396_ - 1,
-        new Color
-        ((int) d_410_, (int) d_410_, (int) d_410_)
-        .getRGB());
-        }
-        }
-        }
-        try {
-        File file = new File("TectonicPlanet/AgeOverlay.png");
-        file.getParentFile().mkdirs();
-        ImageIO.write(image, "png", file);
-        } catch (Exception exception) {
-        System.out.println("Error saving AgeOverlay.png");
-        System.out.println(exception);
-        }
-        System.out.println("Finished saving quadsets");
-        System.out.println("Saving boundaries...");
-        Vector vector = new Vector();
-        Vector[] vectors = new Vector[plates.size()];
-        for (int i_411_ = 0; i_411_ < plates.size(); i_411_++)
-        vectors[i_411_] = new Vector();
-        int i_412_ = -1;
-        int i_413_ = -1;
-        int i_414_ = -1;
-        for (int i_415_ = 0; i_415_ < tets.size(); i_415_++) {
-        tet = (Tet) tets.get(i_415_);
-        if (tet.b.getPlate() != tet.c.getPlate()
-        || tet.b.getPlate() != tet.d.getPlate()) {
-        TecPoint tecpoint = tet.b;
-        TecPoint tecpoint_416_ = tet.c;
-        TecPoint tecpoint_417_ = tet.d;
-        i_412_ = -1;
-        i_413_ = -1;
-        i_414_ = -1;
-        for (int i_418_ = 0; i_418_ < plates.size(); i_418_++) {
-        if (getPlate(i_418_) == tecpoint.getPlate())
-        i_412_ = i_418_;
-        if (getPlate(i_418_) == tecpoint_416_.getPlate())
-        i_413_ = i_418_;
-        if (getPlate(i_418_) == tecpoint_417_.getPlate())
-        i_414_ = i_418_;
-        }
-        if (i_412_ != -1 && !vectors[i_412_].contains(tet))
-        vectors[i_412_].add(tet);
-        if (i_413_ != -1 && !vectors[i_413_].contains(tet))
-        vectors[i_413_].add(tet);
-        if (i_414_ != -1 && !vectors[i_414_].contains(tet))
-        vectors[i_414_].add(tet);
-        }
-        }
-        for (int i_419_ = 0; i_419_ < plates.size(); i_419_++) {
-        while (vectors[i_419_].size() > 0) {
-        Vector vector_420_ = new Vector();
-        tet = (Tet) vectors[i_419_].get(0);
-        vector_420_.add(tet);
-        vectors[i_419_].remove(0);
-        Object object_421_ = null;
-        Tet tet_422_;
-        do {
-        int i_423_ = 0;
-        for (tet_422_ = null;
-        tet_422_ == null && i_423_ < vectors[i_419_].size();
-        i_423_++) {
-        if (sharePlateCrossingLink((Tet) vectors[i_419_]
-        .get(i_423_),
-        tet))
-        tet_422_ = (Tet) vectors[i_419_].get(i_423_);
-        }
-        if (tet_422_ != null) {
-        vector_420_.add(tet_422_);
-        vectors[i_419_].remove(tet_422_);
-        tet = tet_422_;
-        }
-        } while (tet_422_ != null);
-        vector.add(vector_420_);
-        System.out.println(new StringBuilder().append
-        ("Found loop of length ").append
-        (vector_420_.size()).toString());
-        }
-        }
-        ByteBuffer bytebuffer = ByteBuffer.allocate(1000000);
-        bytebuffer.order(ByteOrder.LITTLE_ENDIAN);
-        ByteBuffer bytebuffer_424_ = ByteBuffer.allocate(1000000);
-        bytebuffer_424_.order(ByteOrder.LITTLE_ENDIAN);
-        try {
-        FileChannel filechannel
-        = new FileOutputStream(new File("TectonicPlanet/pathlist.pkg"))
-        .getChannel();
-        FileChannel filechannel_425_
-        = new FileOutputStream(new File("TectonicPlanet/pathlist.idx"))
-        .getChannel();
-        bytebuffer_424_.putInt(vector.size());
-        for (int i_426_ = 0; i_426_ < vector.size(); i_426_++) {
-        Vector vector_427_ = (Vector) vector.get(i_426_);
-        String string = new StringBuilder().append("Plate ").append
-        (i_426_).toString();
-        bytebuffer_424_.put((byte) string.length());
-        bytebuffer_424_.put(string.getBytes());
-        bytebuffer_424_.putDouble(-180.0);
-        bytebuffer_424_.putDouble(-90.0);
-        bytebuffer_424_.putDouble(180.0);
-        bytebuffer_424_.putDouble(90.0);
-        bytebuffer_424_.putLong((long) bytebuffer.position());
-        System.out.println(new StringBuilder().append("Pos=").append
-        (bytebuffer.position()).append
-        (" limit=").append
-        (bytebuffer.limit()).toString());
-        bytebuffer.putInt(vector_427_.size() + 1);
-        bytebuffer.put((byte) 3);
-        for (int i_428_ = 0; i_428_ <= vector_427_.size(); i_428_++) {
-        tet = (Tet) vector_427_.get(i_428_ % vector_427_.size());
-        point3d.x = (tet.b.getPos().x + tet.c.getPos().x
-        + tet.d.getPos().x) / 3.0;
-        point3d.y = (tet.b.getPos().y + tet.c.getPos().y
-        + tet.d.getPos().y) / 3.0;
-        point3d.z = (tet.b.getPos().z + tet.c.getPos().z
-        + tet.d.getPos().z) / 3.0;
-        bytebuffer
-        .putDouble(Math.toDegrees(TecPoint.getLat(point3d)));
-        bytebuffer
-        .putDouble(Math.toDegrees(TecPoint.getLon(point3d)));
-        bytebuffer.putShort((short) 0);
-        }
-        }
-        bytebuffer_424_.flip();
-        filechannel_425_.write(bytebuffer_424_);
-        filechannel_425_.close();
-        bytebuffer.flip();
-        filechannel.write(bytebuffer);
-        filechannel.close();
-        } catch (Exception exception) {
-        System.out.println(exception);
-        exception.printStackTrace();
-        }
-        graphics2d.dispose();*/
     }
 
     public void recurseTiles( int num, int levels, int size, String filename ){
@@ -4085,10 +3268,6 @@ public class World {
         total2.scale( 1.0 / n2 );
 
         vector3d.sub( total2 );
-        boolean bool = true;
-        if( vector3d.dot( tecplate.splitVector ) < 0.0 ){
-            int i = -1;
-        }
         // Somehow check the pointyness of the new (smaller) plate.
         // If it's too pointy, reduce its score
         ArrayList checkPoints;
@@ -4138,8 +3317,6 @@ public class World {
         Vector3d vector3d_448_ = new Vector3d( tecplate.splitVector.z, tecplate.splitVector.y, -tecplate.splitVector.x );
 
         // Now find the planar coords of those points
-        double d_449_ = -3.141592653589793;
-        double d_450_ = 3.141592653589793;
         double[] ds = new double[vector.size()];
         for( int i = 0; i < vector.size(); i++ ){
             LinkPair linkpair = (LinkPair)vector.get( i );
@@ -4154,8 +3331,8 @@ public class World {
         for( int i = 0; i < vector.size(); i++ ){
             for( int i_454_ = 0; i_454_ < vector.size(); i_454_++ ){
                 double d_455_ = Math.abs( ds[i] - ds[i_454_] );
-                if( d_455_ > 3.141592653589793 )
-                    d_455_ = 6.283185307179586 - d;
+                if( d_455_ > Math.PI )
+                    d_455_ = (2 * Math.PI) - d;
                 d = Math.max( d, d_455_ );
             }
         }
@@ -4240,46 +3417,45 @@ public class World {
         Iterator iterator = m_linkSystem.getIterator();
         while( iterator.hasNext() ){
             LinkPair linkpair = (LinkPair)iterator.next();
-            if( linkpair.getCount() > 0 && linkpair.getA().getPlate() != linkpair.getB().getPlate() ){
-                // Link crosses two plates!
-                TecPoint tecpoint = linkpair.getA();
-                TecPoint tecpoint2 = linkpair.getB();
-                double d = tecpoint.getSize() + tecpoint2.getSize();  // NaturalLength
-                double length = tecpoint.getPos().distance( tecpoint2.getPos() );
-                if( length >= d * 2.2 ){
-                    // Break the link!!
-
-                    ///////////////////////////////////////////////////////////////
-                    // If the break is _not_ on the ocean floor, add magma until it reaches the level of surrounding rocks //
-                    ///////////////////////////////////////////////////////////////
-                    System.out.println( "New Ocean floor!" );
-                    TecPoint np1 = new TecPoint( (tecpoint.getPos().x * 2.0 / 3.0 + tecpoint2.getPos().x / 3.0),
-                                                 (tecpoint.getPos().y * 2.0 / 3.0 + tecpoint2.getPos().y / 3.0),
-                                                 (tecpoint.getPos().z * 2.0 / 3.0 + tecpoint2.getPos().z / 3.0), tecpoint.getPlate(), m_epoch );
-                    TecPoint np2 = (new TecPoint( (tecpoint.getPos().x / 3.0 + tecpoint2.getPos().x * 2.0 / 3.0),
-                                                  (tecpoint.getPos().y / 3.0 + tecpoint2.getPos().y * 2.0 / 3.0),
-                                                  (tecpoint.getPos().z / 3.0 + tecpoint2.getPos().z * 2.0 / 3.0), tecpoint2.getPlate(), m_epoch ));
-                    np1.setHeight( m_planetRadius );
-                    np2.setHeight( m_planetRadius );
-                    np1.setSize( (double)(m_pointSpacing / 2) );
-                    np2.setSize( (double)(m_pointSpacing / 2) );
-                    np1.makeNewOceanFloor();
-                    np2.makeNewOceanFloor();
-                    np1.setValid( false );
-                    np2.setValid( false );
-                    addPoint( np1 );
-                    addPoint( np2 );
-                    calcMantleForceForTecPoint( np1 );
-                    calcMantleForceForTecPoint( np2 );
-                }
+            if( !(linkpair.getCount() > 0 && linkpair.getA().getPlate() != linkpair.getB().getPlate()) ){
+                continue;
             }
+            // Link crosses two plates!
+            TecPoint tecpoint = linkpair.getA();
+            TecPoint tecpoint2 = linkpair.getB();
+            double d = tecpoint.getSize() + tecpoint2.getSize();  // NaturalLength
+            double length = tecpoint.getPos().distance( tecpoint2.getPos() );
+            if( length < d * 2.2 ){
+                continue;
+            }
+            // Break the link!!
+
+            ////////////////////////////////////////////////////////////////////
+            // If the break is _not_ on the ocean floor, add magma until it   //
+            // reaches the level of surrounding rocks                         //
+            ////////////////////////////////////////////////////////////////////
+            TecPoint np1 = new TecPoint( (tecpoint.getPos().x * 2.0 / 3.0 + tecpoint2.getPos().x / 3.0),
+                                         (tecpoint.getPos().y * 2.0 / 3.0 + tecpoint2.getPos().y / 3.0),
+                                         (tecpoint.getPos().z * 2.0 / 3.0 + tecpoint2.getPos().z / 3.0), tecpoint.getPlate(), m_epoch );
+            TecPoint np2 = (new TecPoint( (tecpoint.getPos().x / 3.0 + tecpoint2.getPos().x * 2.0 / 3.0),
+                                          (tecpoint.getPos().y / 3.0 + tecpoint2.getPos().y * 2.0 / 3.0),
+                                          (tecpoint.getPos().z / 3.0 + tecpoint2.getPos().z * 2.0 / 3.0), tecpoint2.getPlate(), m_epoch ));
+            np1.setHeight( m_planetRadius );
+            np2.setHeight( m_planetRadius );
+            np1.setSize( (double)(m_pointSpacing / 2) );
+            np2.setSize( (double)(m_pointSpacing / 2) );
+            np1.makeNewOceanFloor();
+            np2.makeNewOceanFloor();
+            np1.setValid( false );
+            np2.setValid( false );
+            addPoint( np1 );
+            addPoint( np2 );
+            calcMantleForceForTecPoint( np1 );
+            calcMantleForceForTecPoint( np2 );
         }
     }
 
     public void obduct( ArrayList p1, ArrayList p2 ){
-        System.out.println( "\t\t************" );
-        System.out.println( "\t\tOBDUCTION!!!" );
-        System.out.println( "\t\t************" );
         // Move the points from p1 onto the plate of p2
         TecPlate tecplate = ((TecPoint)p2.get( 0 )).getPlate();
         for( int i = 0; i < p1.size(); i++ )
@@ -4356,7 +3532,6 @@ public class World {
             HashSet vector = tetsSurrounding( point3d, i );
             Iterator iter = vector.iterator();
             while( iter.hasNext() ){
-                //for (int i_471_ = 0; i_471_ < vector.size(); i_471_++) {
                 Tet t = (Tet)iter.next();
                 if( t.strictlyContains( point3d ) )
                     return t;
@@ -4377,10 +3552,8 @@ public class World {
             }
         }
         for( int i = 0; i < m_tetGridSize; i++ ){
-            HashSet vector_472_ = tetsSurrounding( point3d, i );
             Iterator iter = vector.iterator();
             while( iter.hasNext() ){
-                //for (int i_473_ = 0; i_473_ < vector_472_.size(); i_473_++) {
                 Tet t = (Tet)iter.next();
                 if( t.strictlyContains( point3d ) )
                     return t;
