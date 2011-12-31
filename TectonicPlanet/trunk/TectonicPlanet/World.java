@@ -460,30 +460,69 @@ public class World {
         return m_altered;
     }
 
+    /**
+     * Adds a single tectonic point to the world.
+     *
+     * @param tecpoint The point to add.
+     */
     public void addPoint( TecPoint tecpoint ){
         m_points.add( tecpoint );
     }
 
-    public TecPoint getPoint( int i ){
-        return (TecPoint)m_points.get( i );
+    /**
+     * Retrieves a single point specified by ID.
+     *
+     * @param id The ID of the point to retrieve.
+     *
+     * @return The retrieved point.
+     */
+    public TecPoint getPoint( int id ){
+        return (TecPoint)m_points.get( id );
     }
 
+    /**
+     * Grants access to the whole array of TecPoints in the world.
+     *
+     * @return The World's TecPoint array.
+     */
     public ArrayList getPoints(){
         return m_points;
     }
 
+    /**
+     * Grants access to the whole array of Tets in the world.
+     *
+     * TODO: What is a Tet!?
+     *
+     * @return The World's Tets array.
+     */
     public ArrayList getTets(){
         return m_tets;
     }
 
+    /**
+     * Fetches the number of points in the world.
+     *
+     * @return How many points are known to the world.
+     */
     public int getNumPoints(){
         return m_points.size();
     }
 
+    /**
+     * Fetches the planet's radius.
+     *
+     * @return The radius of the World.
+     */
     public double getPlanetRadius(){
         return m_planetRadius;
     }
 
+    /**
+     * Fetches the location of the planet center.
+     *
+     * @return The coordinates of the World's center.
+     */
     public TecPoint getCenterOfPlanet(){
         return m_planetCenter;
     }
