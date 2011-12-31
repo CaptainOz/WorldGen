@@ -406,7 +406,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
         //repaint();
         if( source.equals( newMenuItem ) ){
             boolean ok = true;
-            if( world != null && world.altered() && !okToLoseUnsaved() )
+            if( world != null && world.isAltered() && !okToLoseUnsaved() )
                 ok = false;
             if( ok ){
                 world = new World();
@@ -684,7 +684,7 @@ public class FrontEnd extends JPanel implements MouseListener, MouseMotionListen
     }
 
     private boolean okToLoseUnsaved(){
-        if( world != null && world.altered() ){
+        if( world != null && world.isAltered() ){
             // The world isn't all saved up - check if they really want to lose it all
             Object[] options = { "Yes, throw it away", "No, I want that!" };
             int n = JOptionPane.showOptionDialog( frame, "The World has been altered since the last save!\nAre you sure you want to lose the work?",

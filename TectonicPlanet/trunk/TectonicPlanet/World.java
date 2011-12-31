@@ -452,9 +452,11 @@ public class World {
     }
     
     /**
-     * Returns <code>true</code> if this World has been altered since the last time it was saved
+     * Detects if this world has been altered since its last save.
+     *
+     * @return True if it has been altered.
      */
-    public boolean altered(){
+    public boolean isAltered(){
         return m_altered;
     }
 
