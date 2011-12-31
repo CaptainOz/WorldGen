@@ -981,1033 +981,49 @@ public class World {
     }
 
     public void timeStep(){
-        ////////////////////////////////////////////////
-        // First do the tectonics: move the plates, and tidy up //
-        ///////////////////////////////////////////////
-        // Check which way up all the triangles are
-        // Note: I'm not sure this system gets used any more (17/2/2008)
-        System.out.println( "Checking triangle way-upness..." );
-        ArrayList tris = new ArrayList();
-        for( int i = 0; i < m_tets.size(); i++ ){
-            Triangle triangle = ((Tet)m_tets.get( i )).getTopTriangle();
-            triangle.cacheIsFacingUp();
-            triangle.cacheArea();
-            triangle.cacheCenter();
-            if( triangle.isEdge() )
-                tris.add( triangle );
-        }
+        // First do the tectonics: move the plates, and tidy up
+        final long timeStepStart = System.currentTimeMillis();
+        _updatePlateMovements();
 
-        // Check for plate with no points in them!
-        System.out.println( "Checking for null plates..." );
-        for( int i = 0; i < m_plates.size(); i++ ){
-            TecPlate tecplate = (TecPlate)m_plates.get( i );
-            if( tecplate.getPoints().isEmpty() ){
-                m_plates.remove( i );
-                i--;
-            }
-        }
-
-        // Check for plates splitting
-        // --------------------
-        // First make all the point mantle flows
-        System.out.println( "Calculating point mantle flows..." );
-        for( int i = 0; i < m_points.size(); i++ ){
-            calcMantleForceForTecPoint( getPoint( i ) );
-        }
-
-        // Then sort out the edgeLinkPair lists
-        System.out.println( "CalculateEdgeLinkPairs..." );
-        calculateEdgeLinkPairs();
-
-        // While they're fresh, check for any plates which have fragmented (Thanks to Jeremy Hussell for this bit, which is faster than my version was)
-        System.out.println( "Check for fragmented plates..." );
-        boolean foundBadness = false;
-        for( int i = 0; i < m_plates.size(); i++ ){
-            TecPlate tecplate = (TecPlate)m_plates.get( i );
-            HashSet tempPoints = new HashSet( tecplate.getPoints() );
-            LinkedList addedPoints = new LinkedList();
-            TecPoint tecpoint = tecplate.getPoint( 0 );
-            addedPoints.add( tecpoint );
-            tempPoints.remove( tecpoint );
-            while( !addedPoints.isEmpty() ){
-                tecpoint = (TecPoint)addedPoints.removeFirst();
-                ArrayList linkedPoints = (ArrayList)m_linkSystem.getPointLinks( tecpoint );
-                if( linkedPoints != null )
-                    for( int j = 0; j < linkedPoints.size(); j++ ){
-                        TecPoint tp = (TecPoint)linkedPoints.get( j );
-                        if( tp.getPlate() == tecplate && tempPoints.remove( tp ) )
-                            addedPoints.add( tp );
-                    }
-            }
-            // OK, we've moved all the ones linked to the original point. Are there any left?
-            if( tempPoints.size() > 0 ){
-                // Yes, there are! The plate must be fragmented.
-                System.out.println( "Fragmented plate!!! Splitting into 2 plates!!!" );
-                foundBadness = true;
-                // Give one set of the points a new plate
-                TecPlate newPlate = new TecPlate( tecplate.getPos().x, tecplate.getPos().y, tecplate.getPos().z );
-                addPlate( newPlate );
-                Iterator iter = tempPoints.iterator();
-                while( iter.hasNext() ){
-                    TecPoint tp = (TecPoint)iter.next();
-                    tp.setPlate( newPlate );
-                }
-                newPlate.center();
-                newPlate.linkRemoved = false;
-                tecplate.center();
-                System.out.format( "New plate has %d points\nOld plate has %d points\n", tempPoints.size(), tecplate.getPoints().size() );
-            }
-            tecplate.linkRemoved = false;
-        }
-
-
-        // If we changed anything, redo the edge lists
-        if( foundBadness )
-            calculateEdgeLinkPairs();
-
-        // Move all the plates
-        for( int i = 0; i < m_plates.size(); i++ ){
-            TecPlate tecPlate = (TecPlate)m_plates.get( i );
-            // Exert the force occuring at each point
-            for( int i_136_ = 0; i_136_ < tecPlate.getPoints().size(); i_136_++ ){
-                TecPoint tecPoint = tecPlate.getPoint( i_136_ );
-                calcMantleForceForTecPoint( tecPoint );
-                tecPlate.force( tecPoint.getPos(), tecPoint.mantleForce );
-                // Don't forget to exert the collision forces
-                tecPlate.force( tecPoint.getPos(), tecPoint.collisionForce );
-            }
-            tecPlate.move();
-            tecPlate.resetForces();
-        }
-
-        // Invalidate every edge point
-        Iterator iterator = m_linkSystem.getIterator();
-        while( iterator.hasNext() ){
-            LinkPair linkpair = (LinkPair)iterator.next();
-            if( linkpair.getA().getPlate() != linkpair.getB().getPlate() ){
-                // Link crosses two plates!
-                linkpair.getA().setValid( false );
-                linkpair.getB().setValid( false );
-            }
-        }
-
-        //pointsCheck();
-
-        // Make a list of all the landmass sections (chunks of nice thick continental crust)
-        System.out.print( "Listing landmasses..." );
-        // Reset all the lms markers
-        for( int i = 0; i < m_points.size(); i++ )
-            getPoint( i ).lms = -1;
-
-        ArrayList landmassSections = new ArrayList();
-        TecPoint firstPoint, nextPoint;
-        for( int p = 0; p < m_points.size(); p++ ){
-            firstPoint = getPoint( p );
-            if( firstPoint.lms == -1 && firstPoint.isContinental() ){
-                // The first unclaimed continental point we find will become the start of a new land mass section...
-                ArrayList lms = new ArrayList();
-                landmassSections.add( lms );
-                lms.add( firstPoint );
-                firstPoint.lms = landmassSections.size() - 1;
-                HashSet possiblePoints = new HashSet( firstPoint.getPlate().getPoints().size() );
-                // Add all the _continental_ points from this plate to the list of possible points
-                for( int i = 0; i < firstPoint.getPlate().getPoints().size(); i++ )
-                    if( firstPoint.getPlate().getPoint( i ).lms == -1 && firstPoint.getPlate().getPoint( i ).isContinental() )
-                        possiblePoints.add( firstPoint.getPlate().getPoint( i ) );
-                for( int i = 0; i < lms.size(); i++ ){
-                    HashSet pointsToAdd = m_linkSystem.getLinkedPoints( (TecPoint)lms.get( i ), pointsSurrounding( ((TecPoint)lms.get( i )).getPos() ) );
-                    Iterator iter = pointsToAdd.iterator();
-                    while( iter.hasNext() ){
-                        //for (int j=0; j<pointsToAdd.size(); j++) {
-                        nextPoint = (TecPoint)iter.next();  //pointsToAdd.get(j);
-                        if( nextPoint.lms == -1 && possiblePoints.contains( nextPoint ) ){
-                            possiblePoints.remove( nextPoint );
-                            lms.add( nextPoint );
-                            nextPoint.lms = landmassSections.size() - 1;
-                        }
-                    }
-                }
-            }
-        }
-        System.out.println( "done! Counted " + landmassSections.size() + " landmass sections" );
-        double[] lmsSize = new double[landmassSections.size()];
-        for( int i = 0; i < landmassSections.size(); i++ ){
-            ArrayList lms = (ArrayList)landmassSections.get( i );
-            for( int j = 0; j < lms.size(); j++ ){
-                TecPoint tecpoint = (TecPoint)lms.get( j );
-                lmsSize[i] += tecpoint.getArea();//3.141592653589793 * Math.pow(tecpoint.getSize() / 2.0, 2.0); // Crappy old way of calculating area!!
-            }
-        }
-
-        //pointsCheck();
-
-        // Examine the length of every link
-        double collisionForce = 0.4;
-        double squash = 0.004;
-        double areaLimit = 1.0E7;		// How large an area is allowed to obduct
-        ArrayList subductionLinks = new ArrayList();
-        Iterator iterator_152_ = m_linkSystem.getIterator();
-        while( iterator_152_.hasNext() ){
-            LinkPair linkpair = (LinkPair)iterator_152_.next();
-            if( linkpair.getA().getPlate() != linkpair.getB().getPlate() ){
-                // Link crosses two plates!
-                TecPoint tecpoint = linkpair.getA();
-                TecPoint tecpoint2 = linkpair.getB();
-                double naturalLength = tecpoint.getSize() + tecpoint2.getSize();
-                double length = tecpoint.getPos().distance( tecpoint2.getPos() );
-                if( length < naturalLength ){
-                    if( tecpoint.isContinental() && tecpoint2.isContinental() ){
-                        // Squashed link between continental crusts, exert force
-                        Vector3d vector3d = new Vector3d( tecpoint2.getPos() );
-                        vector3d.sub( tecpoint.getPos() );
-                        vector3d.scale( collisionForce * naturalLength / length );
-                        //tecpoint2.getPlate().force(tecpoint2.getPos(), vector3d);
-                        tecpoint.collisionForce.scaleAdd( 0.1, vector3d, tecpoint.collisionForce );
-                        vector3d.scale( -1.0 );
-                        //tecpoint2.getPlate().force(tecpoint2.getPos(), vector3d);
-                        tecpoint2.collisionForce.scaleAdd( 0.1, vector3d, tecpoint2.collisionForce );
-                        // Check for obduction
-                        boolean obducted = false;
-                        if( length < naturalLength * 0.8 && tecpoint.lms != -1 && tecpoint2.lms != -1 ){	// If two continental bits are colliding LOTS!
-                            if( lmsSize[tecpoint.lms] < lmsSize[tecpoint2.lms] ){	// and tp1 is smaller
-                                if( lmsSize[tecpoint.lms] <= areaLimit ){
-                                    obduct( ((ArrayList)landmassSections.get( tecpoint.lms )), ((ArrayList)landmassSections.get( tecpoint2.lms )) );
-                                    obducted = true;
-                                }
-                            }
-                            else if( lmsSize[tecpoint2.lms] <= areaLimit ){ // if tp2 is the smaller
-                                obduct( ((ArrayList)landmassSections.get( tecpoint2.lms )), (ArrayList)landmassSections.get( tecpoint.lms ) );
-                                obducted = true;
-                            }
-                        }
-                        if( !obducted && length < naturalLength * 0.9 ){
-                            // Too much squashing, move the points (deform the plates)
-
-                            // First exert even more collision force
-              /*double fScale=0.1*(Math.min(tecpoint.getDepth(), tecpoint2.getDepth())-12);
-                            vector3d.scale(-1.0);
-                            tecpoint.collisionForce.scaleAdd(0.1*fScale,vector3d, tecpoint.collisionForce);
-                            vector3d.scale(-1.0);
-                            tecpoint2.collisionForce.scaleAdd(0.1*fScale,vector3d, tecpoint2.collisionForce);*/
-                            ////////
-                            Vector3d move = new Vector3d();
-                            TecPlate tecplate = tecpoint.getPlate();
-                            TecPlate tecplate2 = tecpoint2.getPlate();
-                            vector3d = new Vector3d( tecpoint.getPos() );
-                            vector3d.sub( tecpoint2.getPos() );
-                            vector3d.scale( squash * naturalLength / length );
-                            double squashSize = 300.0;
-                            // Make a list of all the points we are about to move (in a  HashSet so we can do .contains(point) really fast)
-                            HashSet mPoints = new HashSet( tecplate.getPoints().size() + tecplate2.getPoints().size() );
-                            for( int i = 0; i < tecplate.getPoints().size(); i++ ){
-                                TecPoint tecpoint_159_ = (TecPoint)tecplate.getPoints().get( i );
-                                double dist = tecpoint.getPos().distance( tecpoint_159_.getPos() );
-                                if( dist < squashSize )
-                                    mPoints.add( tecpoint_159_ );
-                            }
-                            for( int i = 0; i < tecplate2.getPoints().size(); i++ ){
-                                TecPoint tecpoint_162_ = ((TecPoint)tecplate2.getPoints().get( i ));
-                                double dist = tecpoint2.getPos().distance( tecpoint_162_.getPos() );
-                                if( dist < squashSize )
-                                    mPoints.add( tecpoint_162_ );
-                            }
-                            // Make a list of all the tets which involve any of the points we are about to move
-                            ArrayList squishTets = new ArrayList();
-                            for( int i = 0; i < m_tets.size(); i++ ){
-                                Tet tet = (Tet)m_tets.get( i );
-                                if( tet.getPlate() == tecplate || tet.getPlate() == tecplate2 )
-                                    if( mPoints.contains( tet.b ) || mPoints.contains( tet.c ) || mPoints.contains( tet.d ) )
-                                        squishTets.add( tet );
-                            }
-                            // Place the 'area' of each tet into its 'oldArea'
-                            for( int i = 0; i < squishTets.size(); i++ ){
-                                Tet tet = (Tet)squishTets.get( i );
-                                tet.calcArea();
-                                tet.oldArea = tet.area;
-                            }
-
-                            for( int i = 0; i < tecplate.getPoints().size(); i++ ){
-                                TecPoint tecpoint_159_ = (TecPoint)tecplate.getPoints().get( i );
-                                double dist = tecpoint.getPos().distance( tecpoint_159_.getPos() );
-                                if( dist < squashSize ){
-                                    move.scale( 1.0 - dist / squashSize, vector3d );
-                                    //tecpoint_159_.scale(1.0 + (0.05 * squash * (1.0 - (dist / squashSize))));
-                                    tecpoint_159_.move( move );
-                                    tecpoint_159_.setHeight( m_planetRadius );
-                                    tecpoint_159_.setValid( false );
-                                }
-                            }
-                            vector3d.scale( -1.0 );
-                            for( int i = 0; i < tecplate2.getPoints().size(); i++ ){
-                                TecPoint tecpoint_162_ = ((TecPoint)tecplate2.getPoints().get( i ));
-                                double dist = tecpoint2.getPos().distance( tecpoint_162_.getPos() );
-                                if( dist < squashSize ){
-                                    move.scale( 1 - dist / squashSize, vector3d );
-                                    //tecpoint_162_.scale(1+0.05*squash*(1-dist/squashSize));
-                                    tecpoint_162_.move( move );
-                                    tecpoint_162_.setHeight( m_planetRadius );
-                                    tecpoint_162_.setValid( false );
-                                }
-                            }
-
-                            // Now that we've moved all the points, and tet tets have been squished,
-                            // use their change in area to scale their height
-                            for( int i = 0; i < squishTets.size(); i++ ){
-                                Tet tet = (Tet)squishTets.get( i );
-                                tet.calcArea();
-                                tet.scaleHeights( tet.oldArea / tet.area );
-                            }
-                        }
-                    }
-                    else {
-                        // Exert small force due to collision, even though non-intercontinental
-                        Vector3d vector3d = new Vector3d( tecpoint2.getPos() );
-                        vector3d.sub( tecpoint.getPos() );
-                        vector3d.scale( 0.2 * collisionForce * naturalLength / length );  // Smaller force due to non-intercontinental collision
-                        //tecpoint2.getPlate().force(tecpoint2.getPos(), vector3d);
-                        //tecpoint.collisionForce.scaleAdd(0.1,vector3d, tecpoint.collisionForce);
-                        vector3d.scale( -1.0 );
-                        //tecpoint.getPlate().force(tecpoint.getPos(), vector3d);
-                        //tecpoint.collisionForce.scaleAdd(0.1,vector3d, tecpoint.collisionForce);
-                        if( (!tecpoint.isContinental() || !tecpoint2.isContinental()) && length < naturalLength * 0.6 ){
-                            // Yay! Link is squashed enough to subduct the oceanic crust!
-                            System.out.println( "Subducting point!" );
-                            subductionLinks.add( linkpair );
-                        }
-                    }
-                }
-            }
-        }
-
-        // Find all the edge points
-        HashSet edgePoints = new HashSet( m_points.size() );
-        Iterator it = m_linkSystem.getIterator();
-        while( it.hasNext() ){
-            LinkPair linkpair = (LinkPair)it.next();
-            if( linkpair.getCount() > 0 && linkpair.getA().getPlate() != linkpair.getB().getPlate() ){
-                // Link crosses two plates!
-                edgePoints.add( linkpair.getA() );
-                edgePoints.add( linkpair.getB() );
-            }
-        }
-
-        // Do the actual subduction
-        for( int i = 0; i < subductionLinks.size(); i++ ){
-            LinkPair linkpair = (LinkPair)subductionLinks.get( i );
-            TecPoint tecpoint = linkpair.getA();
-            TecPoint tecpoint2 = linkpair.getB();
-            TecPoint op, cp;
-            if( tecpoint.getSurfaceHeight() < tecpoint2.getSurfaceHeight() ){
-                op = tecpoint;
-                cp = tecpoint2;
-            }
-            else {
-                op = tecpoint2;
-                cp = tecpoint;
-            }
-            TecPlate tecplate = op.getPlate();  //  Oceanic plate
-            TecPlate tecplate2 = cp.getPlate(); // Continental plate   (not necessarily true, but reflects which one gets subducted and which one overrides)
-            // Before we kill the point (removing all its linking info, etc), we need to find out which direction it subducted in!
-            Vector3d subDir = new Vector3d();
-            ArrayList linkPoints = m_linkSystem.getPointLinks( op );
-            // Add the vector of the link from each point (on the same plate) to the subducting point. This will give the vague direction of subduction (away from the edge of the plate)
-            for( int j = 0; j < linkPoints.size(); j++ ){
-                TecPoint tp = (TecPoint)linkPoints.get( j );
-                if( tp.getPlate() == op.getPlate() ){
-                    subDir.sub( tp.getPos() );
-                    subDir.add( op.getPos() );
-                }
-            }
-            // Scale the force
-            if( subDir.length() > 0 ){
-                subDir.normalize();
-                subDir.scale( 100 );
-            }
-            // _Now_ kill it
-            killPoint( op );
-
-            // Vulcanism in the overriding (continental) plate
-            // Spread the layer over nearby (400km) points
-            double thickness = 1.2; //(op.getDepth() * op.getSize() * op.getSize() / 500000.0);   // How thick a layer of rock to add
-            System.out.println( "Adding rock layer of thickness " + thickness + "km" );
-            for( int i_169_ = 0; i_169_ < tecplate2.getPoints().size(); i_169_++ ){
-                TecPoint temppoint = (TecPoint)tecplate2.getPoints().get( i_169_ );
-                double dist = cp.getPos().distance( temppoint.getPos() );
-                if( dist < 400.0 ){
-                    temppoint.addLayer( thickness * (1.0 - dist / 400.0), 2.7 );  // Volcanic rocks are lighter than oceanic basalt
-                }
-            }
-
-            // Cause pull-down on the subducted plate
-            if( subDir.length() > 0 ){
-                for( int i_172_ = 0; i_172_ < tecplate.getPoints().size(); i_172_++ ){
-                    TecPoint temppoint = (TecPoint)tecplate.getPoints().get( i_172_ );
-                    double dist = op.getPos().distance( temppoint.getPos() );
-                    if( dist < 200.0 ){
-                        temppoint.addBaseDepthOffset( -2.0 * (1.0 - dist / 200.0) );
-                        // Also add slab-pull, a force which drags nearby points (on the subducting plate) down in the same direction as the subducting point
-                        temppoint.collisionForce.add( subDir );
-                    }
-                }
-                // Cause even wider pull-down along the boundary of the plate
-                for( int i_172_ = 0; i_172_ < tecplate.getPoints().size(); i_172_++ ){
-                    TecPoint temppoint = (TecPoint)tecplate.getPoints().get( i_172_ );
-                    if( edgePoints.contains( temppoint ) ){
-                        double dist = op.getPos().distance( temppoint.getPos() );
-                        if( dist < 1500.0 ){
-                            temppoint.addBaseDepthOffset( -1.0 * (1.0 - dist / 1500.0) );
-                        }
-                    }
-                }
-            }
-
-            // And push-up on the overthrusting plate
-            for( int i_175_ = 0; i_175_ < tecplate2.getPoints().size(); i_175_++ ){
-                TecPoint temppoint = (TecPoint)tecplate2.getPoints().get( i_175_ );
-                double dist = cp.getPos().distance( temppoint.getPos() );
-                if( dist < 400.0 )
-                    temppoint.addBaseDepthOffset( 0.2 * (1.0 - dist / 400.0) );
-            }
-            // Cause even wider push-up along the boundary of the plate
-            for( int i_172_ = 0; i_172_ < tecplate2.getPoints().size(); i_172_++ ){
-                TecPoint temppoint = (TecPoint)tecplate2.getPoints().get( i_172_ );
-                if( edgePoints.contains( temppoint ) ){
-                    double dist = cp.getPos().distance( temppoint.getPos() );
-                    if( dist < 1500.0 ){
-                        temppoint.addBaseDepthOffset( 0.1 * (1.0 - dist / 1500.0) );
-                    }
-                }
-            }
-        }
-
-        // Fade the baseDepthOffset on all the points
-        System.out.println( "Fading baseDepthOffset" );
-        for( int i = 0; i < m_points.size(); i++ )
-            getPoint( i ).scaleBaseDepthOffset( 0.99 );
-
-        // Check for inverted triangles
-        int invCount = 0;
-        for( int i_178_ = 0; i_178_ < tris.size(); i_178_++ ){
-            Triangle triangle = (Triangle)tris.get( i_178_ );
-            if( triangle.facingUp != triangle.isFacingUp() )
-                invCount++;
-        }
-        System.out.println( invCount + " triangles inverted" );
-
-        //pointsCheck();
-
-        // Check gaps between plates
+        // Check gaps between plates and redo delaunay triangulation.
         checkPlateGaps();
-
-        //pointsCheck();
-
         redelaunay(); // Includes calculateAreas() at the end...
 
-        // The FEA needs doing _after_ the reDelaunay - it relies on a correct LinkSystem to find linkWidths
-        ///////////////////
-        // New FEA system
-        System.out.print( "Doing FEA..." );
-        double breakForce = 0.04;//40000.0/100.0;  // Tensile strength of links (*320 to compensate for link length)
-        // Clear the old FEA data
-        ArrayList links = new ArrayList( m_linkSystem.getCollection() );
-        for( int i = 0; i < links.size(); i++ ){
-            LinkPair link = (LinkPair)links.get( i );
-            link.pushForce = 0;
-        }
-        for( int r = 0; r < m_points.size(); r++ ){
-            getPoint( r ).FEAforce.set( 0, 0, 0 );  // Clear the old FEA forces
-            getPoint( r ).collisionForce.scale( 0.7 );  // Fade the old collision forces
-        }
-        // Make sure that only plate-crossing links are "broken"
-        for( int i = 0; i < links.size(); i++ ){
-            LinkPair link = (LinkPair)links.get( i );
-            link.broken = false;
-            link.plateCrosser = (link.getA().getPlate() != link.getB().getPlate());
-        }
-
-        // Make a vector of the links inside each plate
-        ArrayList[] plVecs = new ArrayList[m_plates.size()];
-        for( int j = 0; j < m_plates.size(); j++ )
-            plVecs[j] = new ArrayList( links.size() );
-        LinkPair lp;
-        for( int j = 0; j < links.size(); j++ ){
-            lp = (LinkPair)links.get( j );
-            if( lp.getA().getPlate() == lp.getB().getPlate() && getPlateNum( lp.getA().getPlate() ) != -1 ){
-                plVecs[getPlateNum( lp.getA().getPlate() )].add( lp );
-                lp.linkWidth = m_linkSystem.linkWidth( lp );
-            }
-        }
-
-        // FEA one plate at a time
-        ArrayList newPlates = new ArrayList();
-        for( int i = 0; i < m_plates.size(); i++ ){
-            if( Math.random() < 1.2 ){
-                TecPlate plate = getPlate( i );
-                double plateArea = plate.getArea();
-                double plateExp = (0.1 + 0.9 * Math.exp( -Math.pow( Math.min( 0, plateArea - 5000000 ) / 35000000, 2 ) ));
-                //System.out.println("Plate size exponent="+plateExp);
-                // Collect the links of this plate
-                ArrayList plateLinks = plVecs[i];
-                /*LinkPair lp;
-                for (int j=0; j<links.size(); j++) {
-                lp=(LinkPair)links.get(j);
-                if (lp.getA().getPlate()==plate && lp.getB().getPlate()==plate) plateLinks.add(lp);
-                }*/
-                // Recalculate the force distribution, breaking any overstressed links
-                boolean brokeMoreLinks = false, splitPlate = false;
-                double currentBreakForce = breakForce;
-                do {
-                    brokeMoreLinks = false;
-                    for( int r = 0; r < plateLinks.size() * 10; r++ ){
-                        lp = (LinkPair)plateLinks.get( ((int)(Math.random() * plateLinks.size())) );
-                        lp.sortLink();
-                    }
-                    // Check for (and break) overstressed links
-                    for( int r = 0; r < plateLinks.size(); r++ ){
-                        lp = (LinkPair)plateLinks.get( r );
-                        // Estimate the _width_ of the link. Use the sqrt of the average area of the 2 points
-                        //double linkWidth=Math.pow((lp.getA().getArea()+lp.getB().getArea())/2,0.5);
-                        //if (lp.pushForce<0) {aveForce+=lp.pushForce/lp.linkWidth; lc++;}
-                        if( !lp.broken && lp.pushForce < -currentBreakForce * lp.linkWidth * plateExp ){    // This test needs making better. Needs to vary with rock type+thickness.
-                            lp.broken = true;
-                            lp.removeFromFEA();
-                            brokeMoreLinks = true;
-//System.out.println("Broke a link");
-                        }
-                        //aveForce=aveForce/(lc);
-                        //System.out.println("Average pushforce/linkwidth="+aveForce);
-                    }
-
-                    /////////////////
-                    // Now check if the current amount of broken links is sufficient to break the plate in two.
-                    // If so, we don't need to go any further
-                    /////////////////
-                    // If _any_ links were overstressed, check if the plate split into parts
-                    if( brokeMoreLinks ){
-                        // Expand the broken areas
-                        for( int l = 0; l < plateLinks.size(); l++ ){
-                            lp = (LinkPair)plateLinks.get( l );
-                            if( lp.broken ){
-                                ArrayList linksFromA = m_linkSystem.getPointLinks( lp.getA() );
-                                for( int r = 0; r < linksFromA.size(); r++ )
-                                    ((TecPoint)linksFromA.get( r )).broken = true;
-                                ArrayList linksFromB = m_linkSystem.getPointLinks( lp.getB() );
-                                for( int r = 0; r < linksFromB.size(); r++ )
-                                    ((TecPoint)linksFromB.get( r )).broken = true;
-                            }
-                        }
-                        // Find an unbroken TecPoint to start from...
-                        ArrayList platePoints = plate.getPoints();
-                        TecPoint start = null;
-                        for( int r = 0; r < platePoints.size() && start == null; r++ ){
-                            if( !plate.getPoint( r ).broken )
-                                start = plate.getPoint( r );
-                        }
-                        if( start != null ){
-                            // OK, we're got a start point. Set up to spread out from this point
-                            ArrayList movedPoints = new ArrayList();
-                            ArrayList unmovedPoints = new ArrayList( platePoints );
-                            ArrayList brokenPoints = new ArrayList();
-                            // Move the start point
-                            movedPoints.add( start );
-                            unmovedPoints.remove( start );
-                            // Remove any broken points from the unmoved pile
-                            for( int r = 0; r < unmovedPoints.size(); r++ ){
-                                if( ((TecPoint)unmovedPoints.get( r )).broken ){
-                                    brokenPoints.add( unmovedPoints.get( r ) );
-                                    unmovedPoints.remove( r );
-                                    r--;
-                                }
-                            }
-                            // Loop around, moving connected unbroken points to the "moved" pile
-                            for( int r = 0; r < movedPoints.size() && unmovedPoints.size() > 0; r++ ){
-                                TecPoint p1 = (TecPoint)movedPoints.get( r );
-                                ArrayList linkedPoints = m_linkSystem.getPointLinks( p1 );
-                                for( int p = 0; p < linkedPoints.size(); p++ ){
-                                    TecPoint linkedPoint = (TecPoint)linkedPoints.get( p );
-                                    if( linkedPoint != p1 && !linkedPoint.broken && unmovedPoints.contains( linkedPoint ) ){
-                                        movedPoints.add( linkedPoint );
-                                        unmovedPoints.remove( linkedPoint );
-                                    }
-                                }
-                            }
-                            // Now see if there are any points left in the unmoved pile...
-                            if( unmovedPoints.size() > 0 ){
-                                // The plate was split into bits! Make a new plate...
-                                System.out.println( "FEA split a plate!" );
-                                TecPlate newPlate = new TecPlate( 0, 0, 0 );
-                                newPlates.add( newPlate );
-                                for( int j = 0; j < movedPoints.size(); j++ )
-                                    ((TecPoint)movedPoints.get( j )).setPlate( newPlate );
-                                newPlate.center();
-                                plate.center();
-                                // Just need to work out which side the broken points should go on.
-                                int oldBrokenPointsSize = -1;
-                                while( brokenPoints.size() > 0 ){
-                                    // Check if we removed any points last time round
-                                    if( brokenPoints.size() == oldBrokenPointsSize ){
-                                        // Uh-oh. WTF? Why didn't we remove any points?
-                                        System.out.println( "Uh-oh. WTF? Why didn't we remove any points?\nDoing it the slow way" );
-                                        // Make sure all the broken points are really borken
-                                        for( int j = 0; j < brokenPoints.size(); j++ )
-                                            ((TecPoint)brokenPoints.get( j )).broken = true;
-                                        // And assign them the slow way
-                                        // Get the linkedPoints for each brokenPoint, and count how many are in movedPoints and how many are in unmovedPoints
-                                        while( brokenPoints.size() > 0 ){
-                                            TecPoint bp = (TecPoint)brokenPoints.get( 0 );
-                                            ArrayList linkedPoints = m_linkSystem.getPointLinks( bp );
-                                            int countMoved = 0, countUnmoved = 0;
-                                            for( int k = 0; k < linkedPoints.size(); k++ ){
-                                                if( movedPoints.contains( linkedPoints.get( k ) ) )
-                                                    countMoved++;
-                                                else if( unmovedPoints.contains( linkedPoints.get( k ) ) )
-                                                    countUnmoved++;
-                                                else
-                                                    System.out.println( "!!!!!One of the brokenPoints wasn't in Moved _or_ Unmoved!!!!!" );
-                                            }
-                                            // Assign the brokenPoint to whichever it links to more.
-                                            if( countMoved > countUnmoved ){
-                                                // Assign to new plate
-                                                bp.setPlate( newPlate );
-                                                bp.broken = false;
-                                                brokenPoints.remove( 0 );
-                                            }
-                                            else {
-                                                // Assign to old plate
-                                                bp.setPlate( plate );
-                                                bp.broken = false;
-                                                brokenPoints.remove( 0 );
-                                            }
-                                            // Repeat until no more brokenPoints
-                                        }
-                                    }
-                                    oldBrokenPointsSize = brokenPoints.size();
-                                    // Find broken points which are _directly_ linked to the new plate, and remember them
-                                    ArrayList remember = new ArrayList();
-                                    for( int j = 0; j < plateLinks.size(); j++ ){
-                                        lp = (LinkPair)plateLinks.get( j );
-                                        if( lp.getA().broken && !lp.getB().broken && lp.getB().getPlate() == newPlate && !remember.contains( lp.getA() ) )
-                                            remember.add( lp.getA() );
-                                        else if( lp.getB().broken && !lp.getA().broken && lp.getA().getPlate() == newPlate && !remember.contains( lp.getB() ) )
-                                            remember.add( lp.getB() );
-                                    }
-                                    // Move all those points to the new plate (and remove them from the "broken" pile)
-                                    while( remember.size() > 0 ){
-                                        ((TecPoint)remember.get( 0 )).setPlate( newPlate );
-                                        ((TecPoint)remember.get( 0 )).broken = false;
-                                        brokenPoints.remove( remember.get( 0 ) );
-                                        remember.remove( 0 );
-                                    }
-
-                                    // Now do the same for the _old_ plate, then repeat until we've allocated all the broken points to one side or the other...
-                                    // Find broken points which are _directly_ linked to the old plate, and remember them
-                                    remember.clear();
-                                    for( int j = 0; j < plateLinks.size(); j++ ){
-                                        lp = (LinkPair)plateLinks.get( j );
-                                        if( lp.getA().broken && !lp.getB().broken && lp.getB().getPlate() == plate && !remember.contains( lp.getA() ) )
-                                            remember.add( lp.getA() );
-                                        else if( lp.getB().broken && !lp.getA().broken && lp.getA().getPlate() == plate && !remember.contains( lp.getB() ) )
-                                            remember.add( lp.getB() );
-                                    }
-                                    // Move all those points to the old plate (and remove them from the "broken" pile)
-                                    System.out.println( "Moving " + remember.size() + " of " + brokenPoints.size() + " points to the old plate" );
-                                    while( remember.size() > 0 ){
-                                        ((TecPoint)remember.get( 0 )).setPlate( plate );
-                                        ((TecPoint)remember.get( 0 )).broken = false;
-                                        brokenPoints.remove( remember.get( 0 ) );
-                                        remember.remove( 0 );
-                                    }
-
-                                }
-                                // Tidy up which links are plate-crossing
-                                for( int l = 0; l < links.size(); l++ ){
-                                    LinkPair link = (LinkPair)links.get( l );
-                                    link.plateCrosser = (link.getA().getPlate() != link.getB().getPlate());
-                                }
-                                System.out.println( "done splitting plate." );
-                                splitPlate = true;
-                            }
-                        }
-                        else {
-                            System.out.println( "\nCouldn't find unbroken point to start from :(\n" );
-                            // This means the plate was completely overstressed, and should definitely break, but we need to be clever about it
-                            // Hmm.
-                            //splitPlate=true;    // We haven't really split the plate, but the plate is smashed, so we don't need to "sortLinks" any more, just quit
-
-                            // OK, clear all the data so far: we're going to try again with a bigger breakForce
-
-                            // Clear the old FEA data
-                            for( int i2 = 0; i2 < links.size(); i2++ ){
-                                LinkPair link = (LinkPair)links.get( i2 );
-                                link.pushForce = 0;
-                            }
-                            for( int r2 = 0; r2 < m_points.size(); r2++ ){
-                                getPoint( r2 ).FEAforce.set( 0, 0, 0 );  // Clear the old FEA forces
-                            }
-                            // Make sure that only plate-crossing links are "broken"
-                            for( int i2 = 0; i2 < links.size(); i2++ ){
-                                LinkPair link = (LinkPair)links.get( i2 );
-                                link.broken = false;
-                            }
-                            // Put the links back
-                            plateLinks = plVecs[i];
-                            // Choose a new breakForce to try
-                            currentBreakForce += 0.005;
-                        }
-                    }
-
-                } while( brokeMoreLinks && !splitPlate );
-            }
-        }
-        for( int i = 0; i < newPlates.size(); i++ )
-            addPlate( (TecPlate)newPlates.get( i ) );
-        System.out.println( "done FEA" );
-        //////////////////
-
+        // The FEA needs doing _after_ the reDelaunay - it relies on a correct
+        // LinkSystem to find linkWidths
+        _updateFEA();
 
         // Check if any plates are entirely captured within another plate
-        if( m_plates.size() > 2 ){
-            System.out.println( "Checking for captured plates..." );
-            HashSet capturedPlates = new HashSet();
-            HashMap linkedPlate = new HashMap();
-            for( int i = 0; i < m_plates.size(); i++ )
-                capturedPlates.add( getPlate( i ) );
-            Iterator iter = m_linkSystem.getIterator();
-            while( iter.hasNext() ){
-                lp = (LinkPair)iter.next();
-                TecPlate p1 = lp.getA().getPlate();
-                TecPlate p2 = lp.getB().getPlate();
-                if( lp.getA().getPlate() != lp.getB().getPlate() ){
-                    // This link crosses a plate boundary
-                    TecPlate lp1 = (TecPlate)linkedPlate.get( p1 );
-                    TecPlate lp2 = (TecPlate)linkedPlate.get( p2 );
-                    if( lp1 == null ){
-                        linkedPlate.put( p1, p2 ); // We haven't seen p1 linked to another plate before
-                    }
-                    else {  // We _have_ seen p1 linked to another plate before. Check whether this plate is the same one
-                        if( p2 != lp1 ){  // It's not the same plate, so p1 can't be captured
-                            capturedPlates.remove( p1 );
-                        }
-                    }
-                    if( lp2 == null ){
-                        linkedPlate.put( p2, p1 ); // We haven't seen p2 linked to another plate before
-                    }
-                    else {  // We _have_ seen p2 linked to another plate before. Check whether this plate is the same one
-                        if( p1 != lp2 ){  // It's not the same plate, so p2 can't be captured
-                            capturedPlates.remove( p2 );
-                        }
-                    }
-                }
-            }
-            // Accrete all the capturedPlates onto their LinkedPlate
-            if( capturedPlates.size() > 0 )
-                System.out.println( "Found " + capturedPlates.size() + " captured plates" );
-            iter = capturedPlates.iterator();
-            while( iter.hasNext() ){
-                TecPlate innerPlate = (TecPlate)iter.next();
-                TecPlate outerPlate = (TecPlate)linkedPlate.get( innerPlate );
-                while( innerPlate.getPoints().size() > 0 && outerPlate != null ){
-                    TecPoint tecPoint = innerPlate.getPoint( 0 );
-                    tecPoint.setPlate( outerPlate );
-                    ArrayList linkedPoints = m_linkSystem.getPointLinks( tecPoint );
-                    for( int j = 0; j < linkedPoints.size(); j++ ){
-                        m_linkSystem.getLinkPair( tecPoint, (TecPoint)linkedPoints.get( j ) ).plateCrosser = false;
-                    }
-                }
-                m_plates.remove( innerPlate );
-            }
-        }
+        _accreteCapturedPlates();
 
         // Accrete small plates onto their most highly-linked neighbour
-        System.out.println( "Checking for tiny plates..." );
-        double plateSizeLimit = 100000;  // Anything less than 100,000 km ^2 is tiny :)
-        ArrayList accPlates = new ArrayList();
-        for( int i = 0; i < m_plates.size(); i++ ){
-            //System.out.println("Plate size="+getPlate(i).getArea());
-            if( getPlate( i ).getArea() < plateSizeLimit || getPlate( i ).getPoints().size() < 3 )
-                accPlates.add( getPlate( i ) );
-        }
+        _accreteSmallPlates();
 
-        for( int i = 0; i < accPlates.size(); i++ ){
-            TecPlate plate = (TecPlate)accPlates.get( i );
-            // Find which plate this plate should accrete onto
-            HashMap linkWidths = new HashMap();
-            TecPlate otherPlate;
-            Iterator iter = m_linkSystem.getIterator();
-            while( iter.hasNext() ){
-                lp = (LinkPair)iter.next();
-                otherPlate = null;
-                if( lp.getA().getPlate() == plate && lp.getB().getPlate() != plate ){
-                    otherPlate = lp.getB().getPlate();
-                }
-                else if( lp.getA().getPlate() != plate && lp.getB().getPlate() == plate ){
-                    otherPlate = lp.getA().getPlate();
-                }
-                if( otherPlate != null ){
-                    if( linkWidths.get( otherPlate ) == null ){
-                        linkWidths.put( otherPlate, new Double( 0 ) );
-                    }
-                    double w = ((Double)linkWidths.get( otherPlate )).doubleValue();
-                    linkWidths.put( otherPlate, new Double( w + m_linkSystem.linkWidth( lp ) ) );
-                }
-            }
-            // OK, now find the plate with which we have the longest border with
-            double longest = 0;
-            TecPlate bestNeighbour = null;
-            iter = linkWidths.keySet().iterator();
-            while( iter.hasNext() ){
-                otherPlate = (TecPlate)iter.next();
-                double w = ((Double)linkWidths.get( otherPlate )).doubleValue();
-                if( w > longest ){
-                    longest = w;
-                    bestNeighbour = otherPlate;
-                }
-            }
-            // And finally do the actual accretion...
-            if( bestNeighbour != null ){
-                System.out.println( "Removing tiny plate!" );
-                while( plate.getPoints().size() > 0 ){
-                    plate.getPoint( 0 ).setPlate( bestNeighbour );
-                }
-                m_plates.remove( plate );
-            }
-        }
-
-        // Break any stupidly large plates "by force", ie not realistically, just split them!
-        System.out.println( "Checking for huge plates..." );
-        double plateSizeUpperLimit = 100000000;  // Anything bigger than 100,000,000 km ^2 is huge :)
-        for( int i = m_plates.size() - 1; i >= 0; i-- ){
-            //System.out.println("Plate size="+getPlate(i).getArea());
-            if( getPlate( i ).getArea() > plateSizeUpperLimit ){
-                System.out.println( "Splitting huge plate because it's too damn big!" );
-                // Choose where to split it: pick a plane which passes through the middle of the plate
-                Vector3d middle = new Vector3d();
-                for( int j = 0; j < getPlate( i ).getPoints().size(); j++ )
-                    middle.add( getPlate( i ).getPoint( j ).getPos() );
-                Vector3d plane = new Vector3d();  // The vector which defines the plane
-                plane.cross( middle, getRandomVector() );
-                // OK, got the plane.
-                // Now move all the points on one side of it into a new plate
-                ArrayList newPlatePoints = new ArrayList();
-                for( int j = 0; j < getPlate( i ).getPoints().size(); j++ )
-                    if( plane.dot( new Vector3d( getPlate( i ).getPoint( j ).getPos() ) ) > 0 )
-                        newPlatePoints.add( getPlate( i ).getPoint( j ) );
-                if( newPlatePoints.size() > 5 && getPlate( i ).getPoints().size() - newPlatePoints.size() > 5 ){  // Check there are points on both sides!
-                    TecPlate newPlate = new TecPlate( 0, 0, 1 );  // Random position, 'cos we'll recenter it after we've added all the points
-                    for( int j = 0; j < newPlatePoints.size(); j++ )
-                        ((TecPoint)newPlatePoints.get( j )).setPlate( newPlate );
-                    newPlate.center();
-                    addPlate( newPlate );
-                }
-            }
-        }
+        // Break any stupidly large plates "by force", ie not realistically,
+        // just split them!
+        _splitLargePlates();
         calculateEdgeLinkPairs();
 
         pourOnWater();
-
 
         //////////////////////////////////////////////////
         // Now do the "surface" stuff: erosion, soil, rivers, etc //   (but mostly not, in version 5)
         //////////////////////////////////////////////////
 
         // Construct the watershed data
-        System.out.print( "Calculating volCaps..." );
+        double moveLimit = 50;    // Can't add or remove more than this (vertical km of rock) in one turn
         double gradientLimitOnLand = 1.0 / 40.0;  // 2.5% gradient on land
         double gradientLimitInSea = 1.0 / 16.0;  // 6% gradient in the sea
-        double moveLimit = 50;    // Can't add or remove more than this (vertical km of rock) in one turn
-        for( int i = 0; i < m_points.size(); i++ ){
-            TecPoint p = getPoint( i );
-            p.volCap = 10e10;
-            p.volCap2 = 10e10;
-        }
-        it = m_linkSystem.getIterator();
-        while( it.hasNext() ){
-            LinkPair linkpair = (LinkPair)it.next();
-            TecPoint tecpoint;
-            TecPoint tecpoint2;
-            // Ensure that tecpoint is lower than tecpoint2
-            if( linkpair.getA().getSurfaceHeight() > linkpair.getB().getSurfaceHeight() ){
-                tecpoint2 = linkpair.getA();
-                tecpoint = linkpair.getB();
-            }
-            else {
-                tecpoint = linkpair.getA();
-                tecpoint2 = linkpair.getB();
-            }
-            double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
-            double dist = linkpair.getLength();
-            // Calculate limit for tecpoint
-            double gradLimit = gradientLimitOnLand;
-            if( tecpoint.heightAboveSeaLevel() < 0 )
-                gradLimit = gradientLimitInSea;
-            tecpoint.volCap = Math.min( tecpoint.volCap, tecpoint.getArea() * (diff + gradLimit * dist) );
-            tecpoint.volCap = Math.min( tecpoint.volCap, tecpoint.getArea() * diff );    // Limit due to not wanting tp to grow higher than tp2
-            tecpoint.volCap2 = Math.min( tecpoint.volCap2, tecpoint.getArea() * (diff + gradLimit * dist) );
-            // Calculate limit for tecpoint2
-            gradLimit = gradientLimitOnLand;
-            if( tecpoint2.heightAboveSeaLevel() < 0 )
-                gradLimit = gradientLimitInSea;
-            tecpoint2.volCap = Math.min( tecpoint2.volCap, tecpoint2.getArea() * (gradLimit * dist - diff) );
-            tecpoint2.volCap = Math.min( tecpoint2.volCap, 0 );  // Can't add any more without getting higher than surrounding points - we're ALREADY higher than them!
-            tecpoint2.volCap2 = Math.min( tecpoint2.volCap2, tecpoint2.getArea() * (gradLimit * dist - diff) );
-        }
-        System.out.println( "done" );
+        _calcVolumeCaps( gradientLimitOnLand, gradientLimitInSea );
 
-        // Now erode point with negative volCap (gradients which break the gradient limits)
-        System.out.print( "Eroding..." );
-        for( int i = 0; i < m_points.size(); i++ ){
-            TecPoint p = getPoint( i );
-            if( p.volCap < 0 ){
-                // Slice off the excess rock, and make a note of it
-                double liftedVol = Math.min( -p.volCap, moveLimit * p.getArea() );
-                liftedVol = Math.min( liftedVol, Math.max( 0, (p.getDepth() - 4) * p.getArea() ) ); // Don't try to erode the plate to be thinner than 4km
-                double liftedDens = p.getDensity();
-                //System.out.println("\nLifting "+liftedVol+"km^3 of rock");
-                p.remove( liftedVol / p.getArea() );  // Remove by height, not volume
-                // Redo the volCap of this point, and all the points linked from it
-                calcVolCap( p, gradientLimitOnLand, gradientLimitInSea );
-                ArrayList linkedPoints = m_linkSystem.getPointLinks( p );
-                for( int j = 0; j < linkedPoints.size(); j++ ){
-                    calcVolCap( (TecPoint)linkedPoints.get( j ), gradientLimitOnLand, gradientLimitInSea );
-                }
-                // Find where to dump the rock
-                int count = 0;
-                while( liftedVol > 1 && count < 1000 ){
-                    // Find the lowest point from here
-                    TecPoint lowest = p, tempPoint;
-                    double lh = p.getSurfaceHeight();
-                    for( int j = 0; j < linkedPoints.size(); j++ ){
-                        tempPoint = (TecPoint)linkedPoints.get( j );
-                        if( tempPoint.getSurfaceHeight() < lh ){
-                            lowest = tempPoint;
-                            lh = lowest.getSurfaceHeight();
-                        }  // Found a new lowest point
-                    }
-                    //System.out.println("My height="+p.getSurfaceHeight()+", lh="+lh+", lowest.volCap="+(int)lowest.volCap);
-                    // Deal with the lowest point
-                    if( lowest.volCap > 100 ){
-                        // Dump as much rock as poss on the lowest point (without making it higher than surrounding points)
-                        double moveVol = Math.max( 0, Math.min( lowest.volCap, liftedVol ) );
-                        lowest.add( moveVol / lowest.getArea(), liftedDens );
-                        liftedVol -= moveVol;
-                        // Redo the volCap of the lowest point, and all the points linked from it
-                        calcVolCap( lowest, gradientLimitOnLand, gradientLimitInSea );
-                        ArrayList linkedPoints2 = m_linkSystem.getPointLinks( lowest );
-                        for( int k = 0; k < linkedPoints2.size(); k++ ){
-                            calcVolCap( (TecPoint)linkedPoints2.get( k ), gradientLimitOnLand, gradientLimitInSea );
-                        }
-                        //System.out.println("Dumped "+moveVol+"km^3 of rock\n"+liftedVol+"km^3 remaining");
-                    }
-                    else if( Math.abs( lowest.getSurfaceHeight() - p.getSurfaceHeight() ) < 0.01 ){
-                        // We're in the bottom of a hole. Drop a pile here, then repeat.
-                        double moveVol = Math.min( Math.max( 0.01 * lowest.getArea(), lowest.volCap2 ), liftedVol ); // Add a 10m thick layer
-                        lowest.add( moveVol / lowest.getArea(), liftedDens );
-                        liftedVol -= moveVol;
-                        // Redo the volCap of the lowest point, and all the points linked from it
-                        calcVolCap( lowest, gradientLimitOnLand, gradientLimitInSea );
-                        ArrayList linkedPoints2 = m_linkSystem.getPointLinks( lowest );
-                        for( int k = 0; k < linkedPoints2.size(); k++ ){
-                            calcVolCap( (TecPoint)linkedPoints2.get( k ), gradientLimitOnLand, gradientLimitInSea );
-                        }
-                        //System.out.println("Dropped "+moveVol+"km^3 in a hole\n"+liftedVol+"km^3 remaining");
-                    }
-                    // Move pointer to lowest point, and repeat
-                    p = lowest;
-                    linkedPoints = m_linkSystem.getPointLinks( p );
-                    count++;
-                }
-                if( count >= 1000 ){
-                    // TODO: Why is this important enough to warant a giant log
-                    //       message?
-                    // Problem. Dump this rock over the whole planet :)
-                    for( int j = 0; j < m_points.size(); j++ ){
-                        getPoint( j ).add( liftedVol / m_planetSurfaceArea, liftedDens );
-                    }
-                }
-            }
-        }
-        System.out.println( "done" );
+        // Now erode point with negative volCap (gradients which break the
+        // gradient limits)
+        _calcErosion( moveLimit, gradientLimitOnLand, gradientLimitInSea );
 
-        System.out.print( "Smoothing..." );
-        double iceAgeSeaLevel = -0.140 * Math.random(); // Ice ages will reduce sea levels by up to 140m
-        for( int rep = 0; rep < 1; rep++ ){
-            Iterator iterator_193_ = m_linkSystem.getIterator();
-            while( iterator_193_.hasNext() ){
-                LinkPair linkpair;
-                do {
-                    linkpair = (LinkPair)iterator_193_.next();
-                } while( iterator_193_.hasNext() && (Math.random() < 0.5 || linkpair.getCount() < 2) );
-                TecPoint tecpoint;
-                TecPoint tecpoint2;
-                if( linkpair.getA().getSurfaceHeight() > linkpair.getB().getSurfaceHeight() ){
-                    tecpoint2 = linkpair.getA();
-                    tecpoint = linkpair.getB();
-                }
-                else {
-                    tecpoint = linkpair.getA();
-                    tecpoint2 = linkpair.getB();
-                }
-                // Move rock from p1 to p2
-                double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
-                double dist = linkpair.getLength();
-                double gradient = diff / dist;
-                if( Math.random() < 0.0001 )
-                    System.out.println( "             Gradient=" + gradient );
-                if( tecpoint2.heightAboveSeaLevel() > 1400 ){  // Where "mountains" start - high erosion above here
-                    if( Math.random() < 1.5 ){
-                        double depthToRemove = Math.min( moveLimit, diff / (1 + tecpoint2.getArea() / tecpoint.getArea()) );
-                        depthToRemove = Math.max( 0, Math.min( depthToRemove, tecpoint2.getDepth() - 4 ) ); // Don't make the column shorter than 4km
-                        double depthToAdd = depthToRemove * tecpoint2.getArea() / tecpoint.getArea();
-                        if( depthToRemove < 0 || depthToAdd < 0 ){
-                            System.out.println( "depthToRemove=" + depthToRemove + ",  depthToAdd=" + depthToAdd + ", highArea=" + tecpoint2.getArea() + ", lowArea=" + tecpoint.getArea() );
-                            System.exit( 1 );
-                        }
-                        tecpoint2.remove( depthToRemove );
-                        tecpoint.add( depthToAdd, tecpoint2.getDensity() * 0.95 + 2.3 * 0.05 ); // Slowly make the rock closer to 2.3 in density (due to now being sedimentary)
-                    }
-                }
-                else if( tecpoint2.heightAboveSeaLevel() > iceAgeSeaLevel ){
-                    if( Math.random() < 0.001 ){
-                        // It's "legal", but randomly smooth it anyway, to provide gradual erosion over the aeons...
-                        double depthToRemove = Math.min( moveLimit, diff / (1 + tecpoint2.getArea() / tecpoint.getArea()) );
-                        depthToRemove = Math.max( 0, Math.min( depthToRemove, tecpoint2.getDepth() - 4 ) ); // Don't make the column shorter than 4km
-                        double depthToAdd = depthToRemove * tecpoint2.getArea() / tecpoint.getArea();
-                        if( depthToRemove < 0 || depthToAdd < 0 ){
-                            System.out.println( "depthToRemove=" + depthToRemove + ",  depthToAdd=" + depthToAdd + ", highArea=" + tecpoint2.getArea() + ", lowArea=" + tecpoint.getArea() );
-                            System.exit( 1 );
-                        }
-                        tecpoint2.remove( depthToRemove );
-                        tecpoint.add( depthToAdd, tecpoint2.getDensity() * 0.95 + 2.3 * 0.05 ); // Slowly make the rock closer to 2.3 in density (due to now being sedimentary)
-                    }
-                }
-                else if( Math.random() < 0.0005 ){  // Set to zero to cancel underwater smoothing
-                    // It's "legal", but randomly smooth it anyway, to provide EVEN MORE gradual erosion over the aeons UNDERWATER...
-                    double depthToRemove = Math.min( moveLimit, diff / (1 + tecpoint2.getArea() / tecpoint.getArea()) );
-                    depthToRemove = Math.max( 0, Math.min( depthToRemove, tecpoint2.getDepth() - 4 ) ); // Don't make the column shorter than 4km
-                    double depthToAdd = depthToRemove * tecpoint2.getArea() / tecpoint.getArea();
-                    if( depthToRemove < 0 || depthToAdd < 0 ){
-                        System.out.println( "depthToRemove=" + depthToRemove + ",  depthToAdd=" + depthToAdd + ", highArea=" + tecpoint2.getArea() + ", lowArea=" + tecpoint.getArea() );
-                        System.exit( 1 );
-                    }
-                    tecpoint2.remove( depthToRemove );
-                    tecpoint.add( depthToAdd, tecpoint2.getDensity() * 0.95 + 2.3 * 0.05 ); // Slowly make the rock closer to 2.3 in density (due to now being sedimentary)
-                }
-            }
-        }
-        System.out.println( "done" );
+        _smoothLandMasses( moveLimit );
 
         // Melt the base off ridiculously high mountains
-        int meltcount = 0;
-        for( int i = 0; i < getNumPoints(); i++ )
-            if( getPoint( i ).getBaseDepth() < -60 ){
-                // Melt that sucka!
-                double melt = Math.min( 100, -getPoint( i ).getBaseDepth() - 58 );
-                //System.out.println("Melting "+(float)melt+"km off the base of a mountain (its baseDepth was "+getPoint(i).getBaseDepth()+"km)");
-                getPoint( i ).remove( melt );
-                meltcount++;
-            }
-        if( meltcount > 0 )
-            System.out.println( "Melted the base off " + meltcount + " points due to mountains being too high" );
+        _meltHighMountains();
 
         // Now we've eroded things, redo the sealevel:
         pourOnWater();
@@ -2019,12 +1035,17 @@ public class World {
         Color c1, c2;
         ArrayList tempVec = new ArrayList( getLinkSystem().getCollection() );
         for( int i = 0; i < tempVec.size(); i++ ){
-            lp = (LinkPair)tempVec.get( i );
+            LinkPair lp = (LinkPair)tempVec.get( i );
             c1 = lp.getA().getColor();
             c2 = lp.getB().getColor();
             lp.col = new Color( (c1.getRed() + c2.getRed()) / 2, (c1.getGreen() + c2.getGreen()) / 2, (c1.getBlue() + c2.getBlue()) / 2 );
         }
-        m_epoch++;
+
+        // Time step completed. Record how long that took.
+        ++m_epoch;
+        final long timeStepEnd = System.currentTimeMillis();
+        final long timeStepDuration = timeStepEnd - timeStepStart;
+        System.out.println( "TimeStepped in " + timeStepDuration + "ms." );
     }
 
     public void calcVolCap( TecPoint p, double gradientLimitOnLand, double gradientLimitInSea ){
@@ -3918,6 +2939,1032 @@ public class World {
         catch( Exception e ){
             System.out.println( "Error finding suitable file to save to - " + e );
             e.printStackTrace( System.out );
+        }
+    }
+
+    private void _updatePlateMovements(){
+        // Check which way up all the triangles are
+        // Note: I'm not sure this system gets used any more (17/2/2008)
+        ArrayList tris = new ArrayList();
+        for( int i = 0; i < m_tets.size(); i++ ){
+            Triangle triangle = ((Tet)m_tets.get( i )).getTopTriangle();
+            triangle.cacheIsFacingUp();
+            triangle.cacheArea();
+            triangle.cacheCenter();
+            if( triangle.isEdge() )
+                tris.add( triangle );
+        }
+
+        // Check for plate with no points in them!
+        for( int i = 0; i < m_plates.size(); i++ ){
+            TecPlate tecplate = (TecPlate)m_plates.get( i );
+            if( tecplate.getPoints().isEmpty() ){
+                m_plates.remove( i-- );
+            }
+        }
+
+        // Check for plates splitting
+        // --------------------
+        // First make all the point mantle flows
+        for( int i = 0; i < m_points.size(); i++ ){
+            calcMantleForceForTecPoint( getPoint( i ) );
+        }
+
+        // Then sort out the edgeLinkPair lists
+        calculateEdgeLinkPairs();
+
+        // While they're fresh, check for any plates which have fragmented (Thanks to Jeremy Hussell for this bit, which is faster than my version was)
+        boolean foundBadness = false;
+        for( int i = 0; i < m_plates.size(); i++ ){
+            TecPlate tecplate = (TecPlate)m_plates.get( i );
+            HashSet tempPoints = new HashSet( tecplate.getPoints() );
+            LinkedList addedPoints = new LinkedList();
+            TecPoint tecpoint = tecplate.getPoint( 0 );
+            addedPoints.add( tecpoint );
+            tempPoints.remove( tecpoint );
+            while( !addedPoints.isEmpty() ){
+                tecpoint = (TecPoint)addedPoints.removeFirst();
+                ArrayList linkedPoints = (ArrayList)m_linkSystem.getPointLinks( tecpoint );
+                if( linkedPoints != null )
+                    for( int j = 0; j < linkedPoints.size(); j++ ){
+                        TecPoint tp = (TecPoint)linkedPoints.get( j );
+                        if( tp.getPlate() == tecplate && tempPoints.remove( tp ) )
+                            addedPoints.add( tp );
+                    }
+            }
+            // OK, we've moved all the ones linked to the original point. Are there any left?
+            if( tempPoints.size() > 0 ){
+                // Yes, there are! The plate must be fragmented.
+                System.out.println( "Fragmented plate, splitting into 2." );
+                foundBadness = true;
+                // Give one set of the points a new plate
+                TecPlate newPlate = new TecPlate( tecplate.getPos().x, tecplate.getPos().y, tecplate.getPos().z );
+                addPlate( newPlate );
+                Iterator iter = tempPoints.iterator();
+                while( iter.hasNext() ){
+                    TecPoint tp = (TecPoint)iter.next();
+                    tp.setPlate( newPlate );
+                }
+                newPlate.center();
+                newPlate.linkRemoved = false;
+                tecplate.center();
+            }
+            tecplate.linkRemoved = false;
+        }
+
+
+        // If we changed anything, redo the edge lists
+        if( foundBadness )
+            calculateEdgeLinkPairs();
+
+        // Move all the plates
+        for( int i = 0; i < m_plates.size(); i++ ){
+            TecPlate tecPlate = (TecPlate)m_plates.get( i );
+            // Exert the force occuring at each point
+            for( int i_136_ = 0; i_136_ < tecPlate.getPoints().size(); i_136_++ ){
+                TecPoint tecPoint = tecPlate.getPoint( i_136_ );
+                calcMantleForceForTecPoint( tecPoint );
+                tecPlate.force( tecPoint.getPos(), tecPoint.mantleForce );
+                // Don't forget to exert the collision forces
+                tecPlate.force( tecPoint.getPos(), tecPoint.collisionForce );
+            }
+            tecPlate.move();
+            tecPlate.resetForces();
+        }
+
+        // Invalidate every edge point
+        Iterator iterator = m_linkSystem.getIterator();
+        while( iterator.hasNext() ){
+            LinkPair linkpair = (LinkPair)iterator.next();
+            if( linkpair.getA().getPlate() != linkpair.getB().getPlate() ){
+                // Link crosses two plates!
+                linkpair.getA().setValid( false );
+                linkpair.getB().setValid( false );
+            }
+        }
+
+        //pointsCheck();
+
+        // Make a list of all the landmass sections (chunks of nice thick continental crust)
+        // Reset all the lms markers
+        for( int i = 0; i < m_points.size(); i++ )
+            getPoint( i ).lms = -1;
+
+        ArrayList landMassSections = new ArrayList();
+        TecPoint firstPoint, nextPoint;
+        for( int p = 0; p < m_points.size(); p++ ){
+            firstPoint = getPoint( p );
+            if( firstPoint.lms == -1 && firstPoint.isContinental() ){
+                // The first unclaimed continental point we find will become the start of a new land mass section...
+                ArrayList lms = new ArrayList();
+                landMassSections.add( lms );
+                lms.add( firstPoint );
+                firstPoint.lms = landMassSections.size() - 1;
+                HashSet possiblePoints = new HashSet( firstPoint.getPlate().getPoints().size() );
+                // Add all the _continental_ points from this plate to the list of possible points
+                for( int i = 0; i < firstPoint.getPlate().getPoints().size(); i++ )
+                    if( firstPoint.getPlate().getPoint( i ).lms == -1 && firstPoint.getPlate().getPoint( i ).isContinental() )
+                        possiblePoints.add( firstPoint.getPlate().getPoint( i ) );
+                for( int i = 0; i < lms.size(); i++ ){
+                    HashSet pointsToAdd = m_linkSystem.getLinkedPoints( (TecPoint)lms.get( i ), pointsSurrounding( ((TecPoint)lms.get( i )).getPos() ) );
+                    Iterator iter = pointsToAdd.iterator();
+                    while( iter.hasNext() ){
+                        nextPoint = (TecPoint)iter.next();  //pointsToAdd.get(j);
+                        if( nextPoint.lms == -1 && possiblePoints.contains( nextPoint ) ){
+                            possiblePoints.remove( nextPoint );
+                            lms.add( nextPoint );
+                            nextPoint.lms = landMassSections.size() - 1;
+                        }
+                    }
+                }
+            }
+        }
+        double[] landMassSectionSizes = new double[landMassSections.size()];
+        for( int i = 0; i < landMassSections.size(); i++ ){
+            ArrayList lms = (ArrayList)landMassSections.get( i );
+            for( int j = 0; j < lms.size(); j++ ){
+                TecPoint tecpoint = (TecPoint)lms.get( j );
+                landMassSectionSizes[i] += tecpoint.getArea();
+            }
+        }
+
+        //pointsCheck();
+
+        // Examine the length of every link
+        double collisionForce = 0.4;
+        double squash = 0.004;
+        double areaLimit = 1.0E7;		// How large an area is allowed to obduct
+        ArrayList subductionLinks = new ArrayList();
+        Iterator linkIterator = m_linkSystem.getIterator();
+        while( linkIterator.hasNext() ){
+            LinkPair linkpair = (LinkPair)linkIterator.next();
+            TecPoint pointA   = linkpair.getA();
+            TecPoint pointB   = linkpair.getB();
+            if( pointA.getPlate() == pointB.getPlate() ){
+                continue;
+            }
+
+            // Link crosses two plates!
+            double naturalLength = pointA.getSize() + pointB.getSize();
+            double length        = pointA.getPos().distance( pointB.getPos() );
+            if( length >= naturalLength ){
+                continue;
+            }
+            
+            if( pointA.isContinental() && pointB.isContinental() ){
+                _intercontinentalCollision(
+                    pointA,
+                    pointB,
+                    naturalLength,
+                    length,
+                    landMassSectionSizes,
+                    landMassSections,
+                    collisionForce,
+                    squash,
+                    areaLimit
+                );
+            }
+            else { // intra-continental collision
+                // Exert small force due to collision, even though non-intercontinental
+                Vector3d vector3d = new Vector3d( pointB.getPos() );
+                vector3d.sub( pointA.getPos() );
+                vector3d.scale( 0.2 * collisionForce * naturalLength / length );  // Smaller force due to non-intercontinental collision
+                vector3d.scale( -1.0 );
+                if( (!pointA.isContinental() || !pointB.isContinental()) && length < naturalLength * 0.6 ){
+                    // Yay! Link is squashed enough to subduct the oceanic crust!
+                    System.out.println( "Subducting point!" );
+                    subductionLinks.add( linkpair );
+                }
+            }
+        }
+
+        // Find all the edge points
+        HashSet edgePoints = new HashSet( m_points.size() );
+        Iterator it = m_linkSystem.getIterator();
+        while( it.hasNext() ){
+            LinkPair linkpair = (LinkPair)it.next();
+            if( linkpair.getCount() > 0 && linkpair.getA().getPlate() != linkpair.getB().getPlate() ){
+                // Link crosses two plates!
+                edgePoints.add( linkpair.getA() );
+                edgePoints.add( linkpair.getB() );
+            }
+        }
+
+        // Do the actual subduction
+        for( int i = 0; i < subductionLinks.size(); i++ ){
+            LinkPair linkpair = (LinkPair)subductionLinks.get( i );
+            TecPoint tecpoint = linkpair.getA();
+            TecPoint tecpoint2 = linkpair.getB();
+            TecPoint op, cp;
+            if( tecpoint.getSurfaceHeight() < tecpoint2.getSurfaceHeight() ){
+                op = tecpoint;
+                cp = tecpoint2;
+            }
+            else {
+                op = tecpoint2;
+                cp = tecpoint;
+            }
+            TecPlate tecplate = op.getPlate();  //  Oceanic plate
+            TecPlate tecplate2 = cp.getPlate(); // Continental plate   (not necessarily true, but reflects which one gets subducted and which one overrides)
+            // Before we kill the point (removing all its linking info, etc), we need to find out which direction it subducted in!
+            Vector3d subDir = new Vector3d();
+            ArrayList linkPoints = m_linkSystem.getPointLinks( op );
+            // Add the vector of the link from each point (on the same plate) to the subducting point. This will give the vague direction of subduction (away from the edge of the plate)
+            for( int j = 0; j < linkPoints.size(); j++ ){
+                TecPoint tp = (TecPoint)linkPoints.get( j );
+                if( tp.getPlate() == op.getPlate() ){
+                    subDir.sub( tp.getPos() );
+                    subDir.add( op.getPos() );
+                }
+            }
+            // Scale the force
+            if( subDir.length() > 0 ){
+                subDir.normalize();
+                subDir.scale( 100 );
+            }
+            // _Now_ kill it
+            killPoint( op );
+
+            // Vulcanism in the overriding (continental) plate
+            // Spread the layer over nearby (400km) points
+            double thickness = 1.2; //(op.getDepth() * op.getSize() * op.getSize() / 500000.0);   // How thick a layer of rock to add
+            System.out.println( "Adding rock layer of thickness " + thickness + "km" );
+            for( int i_169_ = 0; i_169_ < tecplate2.getPoints().size(); i_169_++ ){
+                TecPoint temppoint = (TecPoint)tecplate2.getPoints().get( i_169_ );
+                double dist = cp.getPos().distance( temppoint.getPos() );
+                if( dist < 400.0 ){
+                    temppoint.addLayer( thickness * (1.0 - dist / 400.0), 2.7 );  // Volcanic rocks are lighter than oceanic basalt
+                }
+            }
+
+            // Cause pull-down on the subducted plate
+            if( subDir.length() > 0 ){
+                for( int i_172_ = 0; i_172_ < tecplate.getPoints().size(); i_172_++ ){
+                    TecPoint temppoint = (TecPoint)tecplate.getPoints().get( i_172_ );
+                    double dist = op.getPos().distance( temppoint.getPos() );
+                    if( dist < 200.0 ){
+                        temppoint.addBaseDepthOffset( -2.0 * (1.0 - dist / 200.0) );
+                        // Also add slab-pull, a force which drags nearby points (on the subducting plate) down in the same direction as the subducting point
+                        temppoint.collisionForce.add( subDir );
+                    }
+                }
+                // Cause even wider pull-down along the boundary of the plate
+                for( int i_172_ = 0; i_172_ < tecplate.getPoints().size(); i_172_++ ){
+                    TecPoint temppoint = (TecPoint)tecplate.getPoints().get( i_172_ );
+                    if( edgePoints.contains( temppoint ) ){
+                        double dist = op.getPos().distance( temppoint.getPos() );
+                        if( dist < 1500.0 ){
+                            temppoint.addBaseDepthOffset( -1.0 * (1.0 - dist / 1500.0) );
+                        }
+                    }
+                }
+            }
+
+            // And push-up on the overthrusting plate
+            for( int i_175_ = 0; i_175_ < tecplate2.getPoints().size(); i_175_++ ){
+                TecPoint temppoint = (TecPoint)tecplate2.getPoints().get( i_175_ );
+                double dist = cp.getPos().distance( temppoint.getPos() );
+                if( dist < 400.0 )
+                    temppoint.addBaseDepthOffset( 0.2 * (1.0 - dist / 400.0) );
+            }
+            // Cause even wider push-up along the boundary of the plate
+            for( int i_172_ = 0; i_172_ < tecplate2.getPoints().size(); i_172_++ ){
+                TecPoint temppoint = (TecPoint)tecplate2.getPoints().get( i_172_ );
+                if( edgePoints.contains( temppoint ) ){
+                    double dist = cp.getPos().distance( temppoint.getPos() );
+                    if( dist < 1500.0 ){
+                        temppoint.addBaseDepthOffset( 0.1 * (1.0 - dist / 1500.0) );
+                    }
+                }
+            }
+        }
+
+        // Fade the baseDepthOffset on all the points
+        System.out.println( "Fading baseDepthOffset" );
+        for( int i = 0; i < m_points.size(); i++ )
+            getPoint( i ).scaleBaseDepthOffset( 0.99 );
+
+        // Check for inverted triangles
+        int invCount = 0;
+        for( int i_178_ = 0; i_178_ < tris.size(); i_178_++ ){
+            Triangle triangle = (Triangle)tris.get( i_178_ );
+            if( triangle.facingUp != triangle.isFacingUp() )
+                invCount++;
+        }
+        System.out.println( invCount + " triangles inverted" );
+    }
+
+    private void _updateFEA(){
+        System.out.print( "Doing FEA..." );
+        double breakForce = 0.04;//40000.0/100.0;  // Tensile strength of links (*320 to compensate for link length)
+        // Clear the old FEA data
+        ArrayList links = new ArrayList( m_linkSystem.getCollection() );
+        for( int i = 0; i < links.size(); i++ ){
+            LinkPair link = (LinkPair)links.get( i );
+            link.pushForce = 0;
+        }
+        for( int r = 0; r < m_points.size(); r++ ){
+            getPoint( r ).FEAforce.set( 0, 0, 0 );  // Clear the old FEA forces
+            getPoint( r ).collisionForce.scale( 0.7 );  // Fade the old collision forces
+        }
+        // Make sure that only plate-crossing links are "broken"
+        for( int i = 0; i < links.size(); i++ ){
+            LinkPair link = (LinkPair)links.get( i );
+            link.broken = false;
+            link.plateCrosser = (link.getA().getPlate() != link.getB().getPlate());
+        }
+
+        // Make a vector of the links inside each plate
+        ArrayList[] plVecs = new ArrayList[m_plates.size()];
+        for( int j = 0; j < m_plates.size(); j++ )
+            plVecs[j] = new ArrayList( links.size() );
+        LinkPair lp;
+        for( int j = 0; j < links.size(); j++ ){
+            lp = (LinkPair)links.get( j );
+            if( lp.getA().getPlate() == lp.getB().getPlate() && getPlateNum( lp.getA().getPlate() ) != -1 ){
+                plVecs[getPlateNum( lp.getA().getPlate() )].add( lp );
+                lp.linkWidth = m_linkSystem.linkWidth( lp );
+            }
+        }
+
+        // FEA one plate at a time
+        ArrayList newPlates = new ArrayList();
+        for( int i = 0; i < m_plates.size(); i++ ){
+            if( Math.random() < 1.2 ){
+                TecPlate plate = getPlate( i );
+                double plateArea = plate.getArea();
+                double plateExp = (0.1 + 0.9 * Math.exp( -Math.pow( Math.min( 0, plateArea - 5000000 ) / 35000000, 2 ) ));
+                //System.out.println("Plate size exponent="+plateExp);
+                // Collect the links of this plate
+                ArrayList plateLinks = plVecs[i];
+                /*LinkPair lp;
+                for (int j=0; j<links.size(); j++) {
+                lp=(LinkPair)links.get(j);
+                if (lp.getA().getPlate()==plate && lp.getB().getPlate()==plate) plateLinks.add(lp);
+                }*/
+                // Recalculate the force distribution, breaking any overstressed links
+                boolean brokeMoreLinks = false, splitPlate = false;
+                double currentBreakForce = breakForce;
+                do {
+                    brokeMoreLinks = false;
+                    for( int r = 0; r < plateLinks.size() * 10; r++ ){
+                        lp = (LinkPair)plateLinks.get( ((int)(Math.random() * plateLinks.size())) );
+                        lp.sortLink();
+                    }
+                    // Check for (and break) overstressed links
+                    for( int r = 0; r < plateLinks.size(); r++ ){
+                        lp = (LinkPair)plateLinks.get( r );
+                        // Estimate the _width_ of the link. Use the sqrt of the average area of the 2 points
+                        //double linkWidth=Math.pow((lp.getA().getArea()+lp.getB().getArea())/2,0.5);
+                        //if (lp.pushForce<0) {aveForce+=lp.pushForce/lp.linkWidth; lc++;}
+                        if( !lp.broken && lp.pushForce < -currentBreakForce * lp.linkWidth * plateExp ){    // This test needs making better. Needs to vary with rock type+thickness.
+                            lp.broken = true;
+                            lp.removeFromFEA();
+                            brokeMoreLinks = true;
+//System.out.println("Broke a link");
+                        }
+                        //aveForce=aveForce/(lc);
+                        //System.out.println("Average pushforce/linkwidth="+aveForce);
+                    }
+
+                    /////////////////
+                    // Now check if the current amount of broken links is sufficient to break the plate in two.
+                    // If so, we don't need to go any further
+                    /////////////////
+                    // If _any_ links were overstressed, check if the plate split into parts
+                    if( brokeMoreLinks ){
+                        // Expand the broken areas
+                        for( int l = 0; l < plateLinks.size(); l++ ){
+                            lp = (LinkPair)plateLinks.get( l );
+                            if( lp.broken ){
+                                ArrayList linksFromA = m_linkSystem.getPointLinks( lp.getA() );
+                                for( int r = 0; r < linksFromA.size(); r++ )
+                                    ((TecPoint)linksFromA.get( r )).broken = true;
+                                ArrayList linksFromB = m_linkSystem.getPointLinks( lp.getB() );
+                                for( int r = 0; r < linksFromB.size(); r++ )
+                                    ((TecPoint)linksFromB.get( r )).broken = true;
+                            }
+                        }
+                        // Find an unbroken TecPoint to start from...
+                        ArrayList platePoints = plate.getPoints();
+                        TecPoint start = null;
+                        for( int r = 0; r < platePoints.size() && start == null; r++ ){
+                            if( !plate.getPoint( r ).broken )
+                                start = plate.getPoint( r );
+                        }
+                        if( start != null ){
+                            // OK, we're got a start point. Set up to spread out from this point
+                            ArrayList movedPoints = new ArrayList();
+                            ArrayList unmovedPoints = new ArrayList( platePoints );
+                            ArrayList brokenPoints = new ArrayList();
+                            // Move the start point
+                            movedPoints.add( start );
+                            unmovedPoints.remove( start );
+                            // Remove any broken points from the unmoved pile
+                            for( int r = 0; r < unmovedPoints.size(); r++ ){
+                                if( ((TecPoint)unmovedPoints.get( r )).broken ){
+                                    brokenPoints.add( unmovedPoints.get( r ) );
+                                    unmovedPoints.remove( r );
+                                    r--;
+                                }
+                            }
+                            // Loop around, moving connected unbroken points to the "moved" pile
+                            for( int r = 0; r < movedPoints.size() && unmovedPoints.size() > 0; r++ ){
+                                TecPoint p1 = (TecPoint)movedPoints.get( r );
+                                ArrayList linkedPoints = m_linkSystem.getPointLinks( p1 );
+                                for( int p = 0; p < linkedPoints.size(); p++ ){
+                                    TecPoint linkedPoint = (TecPoint)linkedPoints.get( p );
+                                    if( linkedPoint != p1 && !linkedPoint.broken && unmovedPoints.contains( linkedPoint ) ){
+                                        movedPoints.add( linkedPoint );
+                                        unmovedPoints.remove( linkedPoint );
+                                    }
+                                }
+                            }
+                            // Now see if there are any points left in the unmoved pile...
+                            if( unmovedPoints.size() > 0 ){
+                                // The plate was split into bits! Make a new plate...
+                                System.out.println( "FEA split a plate!" );
+                                TecPlate newPlate = new TecPlate( 0, 0, 0 );
+                                newPlates.add( newPlate );
+                                for( int j = 0; j < movedPoints.size(); j++ )
+                                    ((TecPoint)movedPoints.get( j )).setPlate( newPlate );
+                                newPlate.center();
+                                plate.center();
+                                // Just need to work out which side the broken points should go on.
+                                int oldBrokenPointsSize = -1;
+                                while( brokenPoints.size() > 0 ){
+                                    // Check if we removed any points last time round
+                                    if( brokenPoints.size() == oldBrokenPointsSize ){
+                                        // Uh-oh. WTF? Why didn't we remove any points?
+                                        System.out.println( "Uh-oh. WTF? Why didn't we remove any points?\nDoing it the slow way" );
+                                        // Make sure all the broken points are really borken
+                                        for( int j = 0; j < brokenPoints.size(); j++ )
+                                            ((TecPoint)brokenPoints.get( j )).broken = true;
+                                        // And assign them the slow way
+                                        // Get the linkedPoints for each brokenPoint, and count how many are in movedPoints and how many are in unmovedPoints
+                                        while( brokenPoints.size() > 0 ){
+                                            TecPoint bp = (TecPoint)brokenPoints.get( 0 );
+                                            ArrayList linkedPoints = m_linkSystem.getPointLinks( bp );
+                                            int countMoved = 0, countUnmoved = 0;
+                                            for( int k = 0; k < linkedPoints.size(); k++ ){
+                                                if( movedPoints.contains( linkedPoints.get( k ) ) )
+                                                    countMoved++;
+                                                else if( unmovedPoints.contains( linkedPoints.get( k ) ) )
+                                                    countUnmoved++;
+                                                else
+                                                    System.out.println( "!!!!!One of the brokenPoints wasn't in Moved _or_ Unmoved!!!!!" );
+                                            }
+                                            // Assign the brokenPoint to whichever it links to more.
+                                            if( countMoved > countUnmoved ){
+                                                // Assign to new plate
+                                                bp.setPlate( newPlate );
+                                                bp.broken = false;
+                                                brokenPoints.remove( 0 );
+                                            }
+                                            else {
+                                                // Assign to old plate
+                                                bp.setPlate( plate );
+                                                bp.broken = false;
+                                                brokenPoints.remove( 0 );
+                                            }
+                                            // Repeat until no more brokenPoints
+                                        }
+                                    }
+                                    oldBrokenPointsSize = brokenPoints.size();
+                                    // Find broken points which are _directly_ linked to the new plate, and remember them
+                                    ArrayList remember = new ArrayList();
+                                    for( int j = 0; j < plateLinks.size(); j++ ){
+                                        lp = (LinkPair)plateLinks.get( j );
+                                        if( lp.getA().broken && !lp.getB().broken && lp.getB().getPlate() == newPlate && !remember.contains( lp.getA() ) )
+                                            remember.add( lp.getA() );
+                                        else if( lp.getB().broken && !lp.getA().broken && lp.getA().getPlate() == newPlate && !remember.contains( lp.getB() ) )
+                                            remember.add( lp.getB() );
+                                    }
+                                    // Move all those points to the new plate (and remove them from the "broken" pile)
+                                    while( remember.size() > 0 ){
+                                        ((TecPoint)remember.get( 0 )).setPlate( newPlate );
+                                        ((TecPoint)remember.get( 0 )).broken = false;
+                                        brokenPoints.remove( remember.get( 0 ) );
+                                        remember.remove( 0 );
+                                    }
+
+                                    // Now do the same for the _old_ plate, then repeat until we've allocated all the broken points to one side or the other...
+                                    // Find broken points which are _directly_ linked to the old plate, and remember them
+                                    remember.clear();
+                                    for( int j = 0; j < plateLinks.size(); j++ ){
+                                        lp = (LinkPair)plateLinks.get( j );
+                                        if( lp.getA().broken && !lp.getB().broken && lp.getB().getPlate() == plate && !remember.contains( lp.getA() ) )
+                                            remember.add( lp.getA() );
+                                        else if( lp.getB().broken && !lp.getA().broken && lp.getA().getPlate() == plate && !remember.contains( lp.getB() ) )
+                                            remember.add( lp.getB() );
+                                    }
+                                    // Move all those points to the old plate (and remove them from the "broken" pile)
+                                    System.out.println( "Moving " + remember.size() + " of " + brokenPoints.size() + " points to the old plate" );
+                                    while( remember.size() > 0 ){
+                                        ((TecPoint)remember.get( 0 )).setPlate( plate );
+                                        ((TecPoint)remember.get( 0 )).broken = false;
+                                        brokenPoints.remove( remember.get( 0 ) );
+                                        remember.remove( 0 );
+                                    }
+
+                                }
+                                // Tidy up which links are plate-crossing
+                                for( int l = 0; l < links.size(); l++ ){
+                                    LinkPair link = (LinkPair)links.get( l );
+                                    link.plateCrosser = (link.getA().getPlate() != link.getB().getPlate());
+                                }
+                                System.out.println( "done splitting plate." );
+                                splitPlate = true;
+                            }
+                        }
+                        else {
+                            System.out.println( "\nCouldn't find unbroken point to start from :(\n" );
+                            // This means the plate was completely overstressed, and should definitely break, but we need to be clever about it
+                            // Hmm.
+                            //splitPlate=true;    // We haven't really split the plate, but the plate is smashed, so we don't need to "sortLinks" any more, just quit
+
+                            // OK, clear all the data so far: we're going to try again with a bigger breakForce
+
+                            // Clear the old FEA data
+                            for( int i2 = 0; i2 < links.size(); i2++ ){
+                                LinkPair link = (LinkPair)links.get( i2 );
+                                link.pushForce = 0;
+                            }
+                            for( int r2 = 0; r2 < m_points.size(); r2++ ){
+                                getPoint( r2 ).FEAforce.set( 0, 0, 0 );  // Clear the old FEA forces
+                            }
+                            // Make sure that only plate-crossing links are "broken"
+                            for( int i2 = 0; i2 < links.size(); i2++ ){
+                                LinkPair link = (LinkPair)links.get( i2 );
+                                link.broken = false;
+                            }
+                            // Put the links back
+                            plateLinks = plVecs[i];
+                            // Choose a new breakForce to try
+                            currentBreakForce += 0.005;
+                        }
+                    }
+
+                } while( brokeMoreLinks && !splitPlate );
+            }
+        }
+        for( int i = 0; i < newPlates.size(); i++ )
+            addPlate( (TecPlate)newPlates.get( i ) );
+        System.out.println( "done FEA" );
+    }
+
+    private void _accreteCapturedPlates(){
+        if( m_plates.size() <= 2 ){
+            return;
+        }
+        System.out.println( "Checking for captured plates..." );
+        HashSet capturedPlates = new HashSet();
+        HashMap linkedPlate = new HashMap();
+        for( int i = 0; i < m_plates.size(); i++ )
+            capturedPlates.add( getPlate( i ) );
+        Iterator iter = m_linkSystem.getIterator();
+        while( iter.hasNext() ){
+            LinkPair lp = (LinkPair)iter.next();
+            TecPlate p1 = lp.getA().getPlate();
+            TecPlate p2 = lp.getB().getPlate();
+            if( lp.getA().getPlate() != lp.getB().getPlate() ){
+                // This link crosses a plate boundary
+                TecPlate lp1 = (TecPlate)linkedPlate.get( p1 );
+                TecPlate lp2 = (TecPlate)linkedPlate.get( p2 );
+                if( lp1 == null ){
+                    linkedPlate.put( p1, p2 ); // We haven't seen p1 linked to another plate before
+                }
+                else {  // We _have_ seen p1 linked to another plate before. Check whether this plate is the same one
+                    if( p2 != lp1 ){  // It's not the same plate, so p1 can't be captured
+                        capturedPlates.remove( p1 );
+                    }
+                }
+                if( lp2 == null ){
+                    linkedPlate.put( p2, p1 ); // We haven't seen p2 linked to another plate before
+                }
+                else {  // We _have_ seen p2 linked to another plate before. Check whether this plate is the same one
+                    if( p1 != lp2 ){  // It's not the same plate, so p2 can't be captured
+                        capturedPlates.remove( p2 );
+                    }
+                }
+            }
+        }
+        // Accrete all the capturedPlates onto their LinkedPlate
+        if( capturedPlates.size() > 0 )
+            System.out.println( "Found " + capturedPlates.size() + " captured plates" );
+        iter = capturedPlates.iterator();
+        while( iter.hasNext() ){
+            TecPlate innerPlate = (TecPlate)iter.next();
+            TecPlate outerPlate = (TecPlate)linkedPlate.get( innerPlate );
+            while( innerPlate.getPoints().size() > 0 && outerPlate != null ){
+                TecPoint tecPoint = innerPlate.getPoint( 0 );
+                tecPoint.setPlate( outerPlate );
+                ArrayList linkedPoints = m_linkSystem.getPointLinks( tecPoint );
+                for( int j = 0; j < linkedPoints.size(); j++ ){
+                    m_linkSystem.getLinkPair( tecPoint, (TecPoint)linkedPoints.get( j ) ).plateCrosser = false;
+                }
+            }
+            m_plates.remove( innerPlate );
+        }
+    }
+
+    private void _accreteSmallPlates(){
+        System.out.println( "Checking for tiny plates..." );
+        double plateSizeLimit = 100000;  // Anything less than 100,000 km ^2 is tiny :)
+        ArrayList accPlates = new ArrayList();
+        for( int i = 0; i < m_plates.size(); i++ ){
+            //System.out.println("Plate size="+getPlate(i).getArea());
+            if( getPlate( i ).getArea() < plateSizeLimit || getPlate( i ).getPoints().size() < 3 )
+                accPlates.add( getPlate( i ) );
+        }
+
+        for( int i = 0; i < accPlates.size(); i++ ){
+            TecPlate plate = (TecPlate)accPlates.get( i );
+            // Find which plate this plate should accrete onto
+            HashMap linkWidths = new HashMap();
+            TecPlate otherPlate;
+            Iterator iter = m_linkSystem.getIterator();
+            while( iter.hasNext() ){
+                LinkPair lp = (LinkPair)iter.next();
+                otherPlate = null;
+                if( lp.getA().getPlate() == plate && lp.getB().getPlate() != plate ){
+                    otherPlate = lp.getB().getPlate();
+                }
+                else if( lp.getA().getPlate() != plate && lp.getB().getPlate() == plate ){
+                    otherPlate = lp.getA().getPlate();
+                }
+                if( otherPlate != null ){
+                    if( linkWidths.get( otherPlate ) == null ){
+                        linkWidths.put( otherPlate, new Double( 0 ) );
+                    }
+                    double w = ((Double)linkWidths.get( otherPlate )).doubleValue();
+                    linkWidths.put( otherPlate, new Double( w + m_linkSystem.linkWidth( lp ) ) );
+                }
+            }
+            // OK, now find the plate with which we have the longest border with
+            double longest = 0;
+            TecPlate bestNeighbour = null;
+            iter = linkWidths.keySet().iterator();
+            while( iter.hasNext() ){
+                otherPlate = (TecPlate)iter.next();
+                double w = ((Double)linkWidths.get( otherPlate )).doubleValue();
+                if( w > longest ){
+                    longest = w;
+                    bestNeighbour = otherPlate;
+                }
+            }
+            // And finally do the actual accretion...
+            if( bestNeighbour != null ){
+                System.out.println( "Removing tiny plate!" );
+                while( plate.getPoints().size() > 0 ){
+                    plate.getPoint( 0 ).setPlate( bestNeighbour );
+                }
+                m_plates.remove( plate );
+            }
+        }
+    }
+
+    private void _splitLargePlates(){
+        System.out.println( "Checking for huge plates..." );
+        double plateSizeUpperLimit = 100000000;  // Anything bigger than 100,000,000 km ^2 is huge :)
+        for( int i = m_plates.size() - 1; i >= 0; i-- ){
+            //System.out.println("Plate size="+getPlate(i).getArea());
+            if( getPlate( i ).getArea() > plateSizeUpperLimit ){
+                System.out.println( "Splitting huge plate because it's too damn big!" );
+                // Choose where to split it: pick a plane which passes through the middle of the plate
+                Vector3d middle = new Vector3d();
+                for( int j = 0; j < getPlate( i ).getPoints().size(); j++ )
+                    middle.add( getPlate( i ).getPoint( j ).getPos() );
+                Vector3d plane = new Vector3d();  // The vector which defines the plane
+                plane.cross( middle, getRandomVector() );
+                // OK, got the plane.
+                // Now move all the points on one side of it into a new plate
+                ArrayList newPlatePoints = new ArrayList();
+                for( int j = 0; j < getPlate( i ).getPoints().size(); j++ )
+                    if( plane.dot( new Vector3d( getPlate( i ).getPoint( j ).getPos() ) ) > 0 )
+                        newPlatePoints.add( getPlate( i ).getPoint( j ) );
+                if( newPlatePoints.size() > 5 && getPlate( i ).getPoints().size() - newPlatePoints.size() > 5 ){  // Check there are points on both sides!
+                    TecPlate newPlate = new TecPlate( 0, 0, 1 );  // Random position, 'cos we'll recenter it after we've added all the points
+                    for( int j = 0; j < newPlatePoints.size(); j++ )
+                        ((TecPoint)newPlatePoints.get( j )).setPlate( newPlate );
+                    newPlate.center();
+                    addPlate( newPlate );
+                }
+            }
+        }
+    }
+
+    private void _calcVolumeCaps( double gradientLimitOnLand, double gradientLimitInSea ){
+        System.out.print( "Calculating volCaps..." );
+        for( int i = 0; i < m_points.size(); i++ ){
+            TecPoint p = getPoint( i );
+            p.volCap = 10e10;
+            p.volCap2 = 10e10;
+        }
+        Iterator it = m_linkSystem.getIterator();
+        while( it.hasNext() ){
+            LinkPair linkpair = (LinkPair)it.next();
+            TecPoint tecpoint;
+            TecPoint tecpoint2;
+            // Ensure that tecpoint is lower than tecpoint2
+            if( linkpair.getA().getSurfaceHeight() > linkpair.getB().getSurfaceHeight() ){
+                tecpoint2 = linkpair.getA();
+                tecpoint = linkpair.getB();
+            }
+            else {
+                tecpoint = linkpair.getA();
+                tecpoint2 = linkpair.getB();
+            }
+            double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
+            double dist = linkpair.getLength();
+            // Calculate limit for tecpoint
+            double gradLimit = gradientLimitOnLand;
+            if( tecpoint.heightAboveSeaLevel() < 0 )
+                gradLimit = gradientLimitInSea;
+            tecpoint.volCap = Math.min( tecpoint.volCap, tecpoint.getArea() * (diff + gradLimit * dist) );
+            tecpoint.volCap = Math.min( tecpoint.volCap, tecpoint.getArea() * diff );    // Limit due to not wanting tp to grow higher than tp2
+            tecpoint.volCap2 = Math.min( tecpoint.volCap2, tecpoint.getArea() * (diff + gradLimit * dist) );
+            // Calculate limit for tecpoint2
+            gradLimit = gradientLimitOnLand;
+            if( tecpoint2.heightAboveSeaLevel() < 0 )
+                gradLimit = gradientLimitInSea;
+            tecpoint2.volCap = Math.min( tecpoint2.volCap, tecpoint2.getArea() * (gradLimit * dist - diff) );
+            tecpoint2.volCap = Math.min( tecpoint2.volCap, 0 );  // Can't add any more without getting higher than surrounding points - we're ALREADY higher than them!
+            tecpoint2.volCap2 = Math.min( tecpoint2.volCap2, tecpoint2.getArea() * (gradLimit * dist - diff) );
+        }
+        System.out.println( "done" );
+    }
+
+    private void _calcErosion( double moveLimit, double gradientLimitOnLand, double gradientLimitInSea ){
+        System.out.print( "Eroding..." );
+        for( int i = 0; i < m_points.size(); i++ ){
+            TecPoint p = getPoint( i );
+            if( p.volCap < 0 ){
+                // Slice off the excess rock, and make a note of it
+                double liftedVol = Math.min( -p.volCap, moveLimit * p.getArea() );
+                liftedVol = Math.min( liftedVol, Math.max( 0, (p.getDepth() - 4) * p.getArea() ) ); // Don't try to erode the plate to be thinner than 4km
+                double liftedDens = p.getDensity();
+                //System.out.println("\nLifting "+liftedVol+"km^3 of rock");
+                p.remove( liftedVol / p.getArea() );  // Remove by height, not volume
+                // Redo the volCap of this point, and all the points linked from it
+                calcVolCap( p, gradientLimitOnLand, gradientLimitInSea );
+                ArrayList linkedPoints = m_linkSystem.getPointLinks( p );
+                for( int j = 0; j < linkedPoints.size(); j++ ){
+                    calcVolCap( (TecPoint)linkedPoints.get( j ), gradientLimitOnLand, gradientLimitInSea );
+                }
+                // Find where to dump the rock
+                int count = 0;
+                while( liftedVol > 1 && count < 1000 ){
+                    // Find the lowest point from here
+                    TecPoint lowest = p, tempPoint;
+                    double lh = p.getSurfaceHeight();
+                    for( int j = 0; j < linkedPoints.size(); j++ ){
+                        tempPoint = (TecPoint)linkedPoints.get( j );
+                        if( tempPoint.getSurfaceHeight() < lh ){
+                            lowest = tempPoint;
+                            lh = lowest.getSurfaceHeight();
+                        }  // Found a new lowest point
+                    }
+                    //System.out.println("My height="+p.getSurfaceHeight()+", lh="+lh+", lowest.volCap="+(int)lowest.volCap);
+                    // Deal with the lowest point
+                    if( lowest.volCap > 100 ){
+                        // Dump as much rock as poss on the lowest point (without making it higher than surrounding points)
+                        double moveVol = Math.max( 0, Math.min( lowest.volCap, liftedVol ) );
+                        lowest.add( moveVol / lowest.getArea(), liftedDens );
+                        liftedVol -= moveVol;
+                        // Redo the volCap of the lowest point, and all the points linked from it
+                        calcVolCap( lowest, gradientLimitOnLand, gradientLimitInSea );
+                        ArrayList linkedPoints2 = m_linkSystem.getPointLinks( lowest );
+                        for( int k = 0; k < linkedPoints2.size(); k++ ){
+                            calcVolCap( (TecPoint)linkedPoints2.get( k ), gradientLimitOnLand, gradientLimitInSea );
+                        }
+                        //System.out.println("Dumped "+moveVol+"km^3 of rock\n"+liftedVol+"km^3 remaining");
+                    }
+                    else if( Math.abs( lowest.getSurfaceHeight() - p.getSurfaceHeight() ) < 0.01 ){
+                        // We're in the bottom of a hole. Drop a pile here, then repeat.
+                        double moveVol = Math.min( Math.max( 0.01 * lowest.getArea(), lowest.volCap2 ), liftedVol ); // Add a 10m thick layer
+                        lowest.add( moveVol / lowest.getArea(), liftedDens );
+                        liftedVol -= moveVol;
+                        // Redo the volCap of the lowest point, and all the points linked from it
+                        calcVolCap( lowest, gradientLimitOnLand, gradientLimitInSea );
+                        ArrayList linkedPoints2 = m_linkSystem.getPointLinks( lowest );
+                        for( int k = 0; k < linkedPoints2.size(); k++ ){
+                            calcVolCap( (TecPoint)linkedPoints2.get( k ), gradientLimitOnLand, gradientLimitInSea );
+                        }
+                        //System.out.println("Dropped "+moveVol+"km^3 in a hole\n"+liftedVol+"km^3 remaining");
+                    }
+                    // Move pointer to lowest point, and repeat
+                    p = lowest;
+                    linkedPoints = m_linkSystem.getPointLinks( p );
+                    count++;
+                }
+                if( count >= 1000 ){
+                    // TODO: Why is this important enough to warant a giant log
+                    //       message?
+                    // Problem. Dump this rock over the whole planet :)
+                    for( int j = 0; j < m_points.size(); j++ ){
+                        getPoint( j ).add( liftedVol / m_planetSurfaceArea, liftedDens );
+                    }
+                }
+            }
+        }
+        System.out.println( "done" );
+    }
+
+    private void _smoothLandMasses( double moveLimit ){
+        System.out.print( "Smoothing..." );
+        double iceAgeSeaLevel = -0.140 * Math.random(); // Ice ages will reduce sea levels by up to 140m
+        for( int rep = 0; rep < 1; rep++ ){
+            Iterator iterator_193_ = m_linkSystem.getIterator();
+            while( iterator_193_.hasNext() ){
+                LinkPair linkpair;
+                do {
+                    linkpair = (LinkPair)iterator_193_.next();
+                } while( iterator_193_.hasNext() && (Math.random() < 0.5 || linkpair.getCount() < 2) );
+                TecPoint tecpoint;
+                TecPoint tecpoint2;
+                if( linkpair.getA().getSurfaceHeight() > linkpair.getB().getSurfaceHeight() ){
+                    tecpoint2 = linkpair.getA();
+                    tecpoint = linkpair.getB();
+                }
+                else {
+                    tecpoint = linkpair.getA();
+                    tecpoint2 = linkpair.getB();
+                }
+                // Move rock from p1 to p2
+                double diff = (tecpoint2.getSurfaceHeight() - tecpoint.getSurfaceHeight());
+                double dist = linkpair.getLength();
+                double gradient = diff / dist;
+                if( Math.random() < 0.0001 )
+                    System.out.println( "             Gradient=" + gradient );
+                if( tecpoint2.heightAboveSeaLevel() > 1400 ){  // Where "mountains" start - high erosion above here
+                    if( Math.random() < 1.5 ){
+                        double depthToRemove = Math.min( moveLimit, diff / (1 + tecpoint2.getArea() / tecpoint.getArea()) );
+                        depthToRemove = Math.max( 0, Math.min( depthToRemove, tecpoint2.getDepth() - 4 ) ); // Don't make the column shorter than 4km
+                        double depthToAdd = depthToRemove * tecpoint2.getArea() / tecpoint.getArea();
+                        if( depthToRemove < 0 || depthToAdd < 0 ){
+                            System.out.println( "depthToRemove=" + depthToRemove + ",  depthToAdd=" + depthToAdd + ", highArea=" + tecpoint2.getArea() + ", lowArea=" + tecpoint.getArea() );
+                            System.exit( 1 );
+                        }
+                        tecpoint2.remove( depthToRemove );
+                        tecpoint.add( depthToAdd, tecpoint2.getDensity() * 0.95 + 2.3 * 0.05 ); // Slowly make the rock closer to 2.3 in density (due to now being sedimentary)
+                    }
+                }
+                else if( tecpoint2.heightAboveSeaLevel() > iceAgeSeaLevel ){
+                    if( Math.random() < 0.001 ){
+                        // It's "legal", but randomly smooth it anyway, to provide gradual erosion over the aeons...
+                        double depthToRemove = Math.min( moveLimit, diff / (1 + tecpoint2.getArea() / tecpoint.getArea()) );
+                        depthToRemove = Math.max( 0, Math.min( depthToRemove, tecpoint2.getDepth() - 4 ) ); // Don't make the column shorter than 4km
+                        double depthToAdd = depthToRemove * tecpoint2.getArea() / tecpoint.getArea();
+                        if( depthToRemove < 0 || depthToAdd < 0 ){
+                            System.out.println( "depthToRemove=" + depthToRemove + ",  depthToAdd=" + depthToAdd + ", highArea=" + tecpoint2.getArea() + ", lowArea=" + tecpoint.getArea() );
+                            System.exit( 1 );
+                        }
+                        tecpoint2.remove( depthToRemove );
+                        tecpoint.add( depthToAdd, tecpoint2.getDensity() * 0.95 + 2.3 * 0.05 ); // Slowly make the rock closer to 2.3 in density (due to now being sedimentary)
+                    }
+                }
+                else if( Math.random() < 0.0005 ){  // Set to zero to cancel underwater smoothing
+                    // It's "legal", but randomly smooth it anyway, to provide EVEN MORE gradual erosion over the aeons UNDERWATER...
+                    double depthToRemove = Math.min( moveLimit, diff / (1 + tecpoint2.getArea() / tecpoint.getArea()) );
+                    depthToRemove = Math.max( 0, Math.min( depthToRemove, tecpoint2.getDepth() - 4 ) ); // Don't make the column shorter than 4km
+                    double depthToAdd = depthToRemove * tecpoint2.getArea() / tecpoint.getArea();
+                    if( depthToRemove < 0 || depthToAdd < 0 ){
+                        System.out.println( "depthToRemove=" + depthToRemove + ",  depthToAdd=" + depthToAdd + ", highArea=" + tecpoint2.getArea() + ", lowArea=" + tecpoint.getArea() );
+                        System.exit( 1 );
+                    }
+                    tecpoint2.remove( depthToRemove );
+                    tecpoint.add( depthToAdd, tecpoint2.getDensity() * 0.95 + 2.3 * 0.05 ); // Slowly make the rock closer to 2.3 in density (due to now being sedimentary)
+                }
+            }
+        }
+        System.out.println( "done" );
+    }
+
+    private void _meltHighMountains(){
+        int meltcount = 0;
+        for( int i = 0; i < getNumPoints(); i++ )
+            if( getPoint( i ).getBaseDepth() < -60 ){
+                // Melt that sucka!
+                double melt = Math.min( 100, -getPoint( i ).getBaseDepth() - 58 );
+                //System.out.println("Melting "+(float)melt+"km off the base of a mountain (its baseDepth was "+getPoint(i).getBaseDepth()+"km)");
+                getPoint( i ).remove( melt );
+                meltcount++;
+            }
+        if( meltcount > 0 )
+            System.out.println( "Melted the base off " + meltcount + " points due to mountains being too high" );
+
+    }
+
+    private void _intercontinentalCollision( TecPoint pointA, TecPoint pointB, double naturalLength, double length, double[] landMassSectionSizes, ArrayList landMassSections, double collisionForce, double squash, double areaLimit ){
+        // Squashed link between continental crusts, exert force
+        Vector3d vector3d = new Vector3d( pointB.getPos() );
+        Point3d positionA = pointA.getPos();
+        Point3d positionB = pointB.getPos();
+        vector3d.sub( positionA );
+        vector3d.scale( collisionForce * naturalLength / length );
+        pointA.collisionForce.scaleAdd( 0.1, vector3d, pointA.collisionForce );
+        vector3d.scale( -1.0 );
+        pointB.collisionForce.scaleAdd( 0.1, vector3d, pointB.collisionForce );
+
+        // Check for obduction
+        boolean obducted = false;
+        if( length < naturalLength * 0.8 && pointA.lms != -1 && pointB.lms != -1 ){	// If two continental bits are colliding LOTS!
+            if( landMassSectionSizes[pointA.lms] < landMassSectionSizes[pointB.lms] ){	// and tp1 is smaller
+                if( landMassSectionSizes[pointA.lms] <= areaLimit ){
+                    obduct( ((ArrayList)landMassSections.get( pointA.lms )), ((ArrayList)landMassSections.get( pointB.lms )) );
+                    obducted = true;
+                }
+            }
+            else if( landMassSectionSizes[pointB.lms] <= areaLimit ){ // if tp2 is the smaller
+                obduct( ((ArrayList)landMassSections.get( pointB.lms )), (ArrayList)landMassSections.get( pointA.lms ) );
+                obducted = true;
+            }
+        }
+        if( obducted || length >= naturalLength * 0.9 ){
+            return;
+        }
+        // Too much squashing, move the points (deform the plates)
+
+        // First exert even more collision force
+        Vector3d move   = new Vector3d();
+        TecPlate plateA = pointA.getPlate();
+        TecPlate plateB = pointB.getPlate();
+        vector3d = new Vector3d( positionA );
+        vector3d.sub( positionB );
+        vector3d.scale( squash * naturalLength / length );
+        double squashSize   = 300.0;
+        double squashSquare = Math.pow( squashSize, 2 );
+
+        // Make a list of all the points we are about to move (in a  HashSet so
+        // we can do .contains(point) really fast)
+        ArrayList plateAPoints = plateA.getPoints();
+        int plateAPointCount   = plateAPoints.size();
+        ArrayList plateBPoints = plateB.getPoints();
+        int plateBPointCount   = plateBPoints.size();
+        HashSet pointSet = new HashSet( plateAPointCount + plateBPointCount );
+        for( int i = 0; i < plateAPointCount; ++i ){
+            TecPoint point = (TecPoint)plateAPoints.get( i );
+            double dist = pointA.getPos().distanceSquared( point.getPos() );
+            if( dist < squashSquare )
+                pointSet.add( point );
+        }
+        for( int i = 0; i < plateBPointCount; ++i ){
+            TecPoint point = (TecPoint)plateBPoints.get( i );
+            double dist = positionB.distanceSquared( point.getPos() );
+            if( dist < squashSquare )
+                pointSet.add( point );
+        }
+
+        // Make a list of all the tets which involve any of the points we are
+        // about to move
+        ArrayList squishTets = new ArrayList();
+        for( int i = 0; i < m_tets.size(); ++i ){
+            Tet tet = (Tet)m_tets.get( i );
+            TecPlate plate = tet.getPlate();
+            if( plate != plateA && plate != plateB ){
+                continue;
+            }
+            if( pointSet.contains( tet.b ) || pointSet.contains( tet.c ) || pointSet.contains( tet.d ) )
+                squishTets.add( tet );
+        }
+        // Place the 'area' of each tet into its 'oldArea'
+        for( int i = 0; i < squishTets.size(); ++i ){
+            Tet tet = (Tet)squishTets.get( i );
+            tet.calcArea();
+            tet.oldArea = tet.area;
+        }
+
+        for( int i = 0; i < plateAPointCount; ++i ){
+            TecPoint tecpoint_159_ = (TecPoint)plateAPoints.get( i );
+            double dist = positionA.distanceSquared( tecpoint_159_.getPos() );
+            if( dist < squashSquare ){
+                move.scale( 1.0 - dist / squashSize, vector3d );
+                //tecpoint_159_.scale(1.0 + (0.05 * squash * (1.0 - (dist / squashSize))));
+                tecpoint_159_.move( move );
+                tecpoint_159_.setHeight( m_planetRadius );
+                tecpoint_159_.setValid( false );
+            }
+        }
+        vector3d.scale( -1.0 );
+        for( int i = 0; i < plateBPointCount; ++i ){
+            TecPoint tecpoint_162_ = ((TecPoint)plateBPoints.get( i ));
+            double dist = positionB.distanceSquared( tecpoint_162_.getPos() );
+            if( dist < squashSquare ){
+                move.scale( 1 - dist / squashSize, vector3d );
+                //tecpoint_162_.scale(1+0.05*squash*(1-dist/squashSize));
+                tecpoint_162_.move( move );
+                tecpoint_162_.setHeight( m_planetRadius );
+                tecpoint_162_.setValid( false );
+            }
+        }
+
+        // Now that we've moved all the points, and tet tets have been squished,
+        // use their change in area to scale their height
+        for( int i = 0; i < squishTets.size(); ++i ){
+            Tet tet = (Tet)squishTets.get( i );
+            tet.calcArea();
+            tet.scaleHeights( tet.oldArea / tet.area );
         }
     }
 }
